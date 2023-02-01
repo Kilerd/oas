@@ -1,0 +1,3 @@
+[submodule "openapi3-examples"]
+	path = openapi3-examples
+	url = https://github.com/Mermade/openapi3-examples.git
