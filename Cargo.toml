@@ -9,3 +9,10 @@ license = "MIT"
 
 [dependencies]
 either = "1.8.1"
+serde = {version = "1", features=["derive"]}
+serde_json = "1"
+serde_with = "2.2.0"
+
+[dev-dependencies]
+assert-json-diff = "2.0.2"
+
