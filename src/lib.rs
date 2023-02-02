@@ -5,7 +5,7 @@ use std::collections::BTreeMap;
 #[skip_serializing_none]
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(untagged)]
-pub enum Referentable<T> {
+pub enum Referenceable<T> {
     Data(T),
     Reference(Reference),
 }
@@ -107,23 +107,23 @@ pub struct ServerVariable {
 #[serde(rename_all = "camelCase")]
 pub struct Components {
     /// An object to hold reusable Schema Objects.
-    pub schemas: Option<BTreeMap<String, Referentable<Schema>>>,
+    pub schemas: Option<BTreeMap<String, Referenceable<Schema>>>,
     /// An object to hold reusable Response Objects.
-    pub responses: Option<BTreeMap<String, Referentable<Response>>>,
+    pub responses: Option<BTreeMap<String, Referenceable<Response>>>,
     /// An object to hold reusable Parameter Objects.
-    pub parameters: Option<BTreeMap<String, Referentable<Parameter>>>,
+    pub parameters: Option<BTreeMap<String, Referenceable<Parameter>>>,
     /// An object to hold reusable Example Objects.
-    pub examples: Option<BTreeMap<String, Referentable<Example>>>,
+    pub examples: Option<BTreeMap<String, Referenceable<Example>>>,
     /// An object to hold reusable Request Body Objects.
-    pub request_bodies: Option<BTreeMap<String, Referentable<RequestBody>>>,
+    pub request_bodies: Option<BTreeMap<String, Referenceable<RequestBody>>>,
     /// An object to hold reusable Header Objects.
-    pub headers: Option<BTreeMap<String, Referentable<Header>>>,
+    pub headers: Option<BTreeMap<String, Referenceable<Header>>>,
     /// An object to hold reusable Security Scheme Objects.
-    pub security_schemes: Option<BTreeMap<String, Referentable<SecurityScheme>>>,
+    pub security_schemes: Option<BTreeMap<String, Referenceable<SecurityScheme>>>,
     /// An object to hold reusable Link Objects.
-    pub links: Option<BTreeMap<String, Referentable<Link>>>,
+    pub links: Option<BTreeMap<String, Referenceable<Link>>>,
     /// An object to hold reusable Callback Objects.
-    pub callbacks: Option<BTreeMap<String, Referentable<Callback>>>,
+    pub callbacks: Option<BTreeMap<String, Referenceable<Callback>>>,
 }
 
 /// Describes the operations available on a single path. A Path Item MAY be empty, due to ACL constraints. The path itself is still exposed to the documentation viewer but they will not know which operations and parameters are available.
@@ -156,7 +156,7 @@ pub struct PathItem {
     /// An alternative `server` array to service all operations in this path.
     pub servers: Option<Vec<Server>>,
     /// A list of parameters that are applicable for all the operations described under this path. These parameters can be overridden at the operation level, but cannot be removed there. The list MUST NOT include duplicated parameters. A unique parameter is defined by a combination of a name and location. The list can use the Reference Object to link to parameters that are defined at the OpenAPI Object's components/parameters.
-    pub parameters: Option<Vec<Referentable<Parameter>>>,
+    pub parameters: Option<Vec<Referenceable<Parameter>>>,
 }
 
 /// Describes a single API operation on a path.
@@ -175,13 +175,13 @@ pub struct Operation {
     /// Unique string used to identify the operation. The id MUST be unique among all operations described in the API. The operationId value is case-sensitive. Tools and libraries MAY use the operationId to uniquely identify an operation, therefore, it is RECOMMENDED to follow common programming naming conventions.
     pub operation_id: Option<String>,
     /// A list of parameters that are applicable for this operation. If a parameter is already defined at the Path Item, the new definition will override it but can never remove it. The list MUST NOT include duplicated parameters. A unique parameter is defined by a combination of a name and location. The list can use the Reference Object to link to parameters that are defined at the OpenAPI Object's components/parameters.
-    pub parameters: Option<Vec<Referentable<Parameter>>>,
+    pub parameters: Option<Vec<Referenceable<Parameter>>>,
     /// The request body applicable for this operation. The requestBody is only supported in HTTP methods where the HTTP 1.1 specification RFC7231 has explicitly defined semantics for request bodies. In other cases where the HTTP spec is vague, requestBody SHALL be ignored by consumers.
-    pub request_body: Option<Referentable<RequestBody>>,
+    pub request_body: Option<Referenceable<RequestBody>>,
     /// The list of possible responses as they are returned from executing this operation.
     pub responses: Responses,
     /// A map of possible out-of band callbacks related to the parent operation. The key is a unique identifier for the Callback Object. Each value in the map is a Callback Object that describes a request that may be initiated by the API provider and the expected responses.
-    pub callbacks: Option<BTreeMap<String, Referentable<Callback>>>,
+    pub callbacks: Option<BTreeMap<String, Referenceable<Callback>>>,
     /// Declares this operation to be deprecated. Consumers SHOULD refrain from usage of the declared operation. Default value is `false`.
     pub deprecated: Option<bool>,
     /// A declaration of which security mechanisms can be used for this operation. The list of values includes alternative security requirement objects that can be used. Only one of the security requirement objects need to be satisfied to authorize a request. To make security optional, an empty security requirement (`{}`) can be included in the array. This definition overrides any declared top-level security. To remove a top-level security declaration, an empty array can be used.
@@ -241,11 +241,11 @@ pub struct Parameter {
     pub explode: Option<bool>,
     pub allow_reserved: Option<bool>,
     /// The schema defining the type used for the parameter.
-    pub schema: Option<Referentable<Schema>>,
+    pub schema: Option<Referenceable<Schema>>,
     /// Example of the parameter's potential value.
     pub example: Option<Any>,
     /// Examples of the parameter's potential value.
-    pub examples: Option<BTreeMap<String, Referentable<Example>>>,
+    pub examples: Option<BTreeMap<String, Referenceable<Example>>>,
     /// A map containing the representations for the parameter. The key is the media type and the value describes it.
     pub content: Option<BTreeMap<String, MediaType>>,
 }
@@ -267,11 +267,11 @@ pub struct RequestBody {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct MediaType {
     /// The schema defining the content of the request, response, or parameter.
-    pub schema: Option<Referentable<Schema>>,
+    pub schema: Option<Referenceable<Schema>>,
     /// Example of the media type.
     pub example: Option<Any>,
     /// Examples of the media type.
-    pub examples: Option<BTreeMap<String, Referentable<Example>>>,
+    pub examples: Option<BTreeMap<String, Referenceable<Example>>>,
     /// A map between a property name and its encoding information.
     pub encoding: Option<BTreeMap<String, Encoding>>,
 }
@@ -284,7 +284,7 @@ pub struct Encoding {
     /// The Content-Type for encoding a specific property.
     pub content_type: Option<String>,
     /// map allowing additional information to be provided as headers, for example `Content-Disposition`. `Content-Type` is described separately and SHALL be ignored in this section. This property SHALL be ignored if the request body media type is not a `multipart`.
-    pub headers: Option<BTreeMap<String, Referentable<Header>>>,
+    pub headers: Option<BTreeMap<String, Referenceable<Header>>>,
     /// Describes how a specific property value will be serialized depending on its type.
     pub style: Option<String>,
     pub explode: Option<bool>,
@@ -299,9 +299,9 @@ pub struct Encoding {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Responses {
     /// The documentation of responses other than the ones declared for specific HTTP response codes. Use this field to cover undeclared responses. A Reference Object can link to a response that the OpenAPI Object's components/responses section defines.
-    pub default: Option<Referentable<Response>>,
+    pub default: Option<Referenceable<Response>>,
     #[serde(flatten)]
-    pub data: BTreeMap<String, Referentable<Response>>,
+    pub data: BTreeMap<String, Referenceable<Response>>,
 }
 
 /// Describes a single response from an API Operation, including design-time, static `links` to operations based on the response.
@@ -311,11 +311,11 @@ pub struct Response {
     /// A short description of the response.
     pub description: String,
     /// Maps a header name to its definition.
-    pub headers: Option<BTreeMap<String, Referentable<Header>>>,
+    pub headers: Option<BTreeMap<String, Referenceable<Header>>>,
     /// A map containing descriptions of potential response payloads.
     pub content: Option<BTreeMap<String, MediaType>>,
     /// A map of operations links that can be followed from the response.
-    pub links: Option<BTreeMap<String, Referentable<Link>>>,
+    pub links: Option<BTreeMap<String, Referenceable<Link>>>,
 }
 
 /// A map of possible out-of band callbacks related to the parent operation. Each value in the map is a Path Item Object that describes a set of requests that may be initiated by the API provider and the expected responses. The key value used to identify the path item object is an expression, evaluated at runtime, that identifies a URL to use for the callback operation.
@@ -371,9 +371,9 @@ pub struct Header {
     pub style: Option<String>,
     pub explode: Option<bool>,
     pub allow_reserved: Option<bool>,
-    pub schema: Option<Referentable<Schema>>,
+    pub schema: Option<Referenceable<Schema>>,
     pub example: Option<Any>,
-    pub examples: Option<BTreeMap<String, Referentable<Example>>>,
+    pub examples: Option<BTreeMap<String, Referenceable<Example>>>,
     pub content: Option<BTreeMap<String, MediaType>>,
 }
 
