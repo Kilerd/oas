@@ -155,7 +155,7 @@ pub struct Parameter {
     explode: Option<bool>,
     allow_reserved: Option<bool>,
     schema: Option<Referentable<Schema>>,
-    // todo example
+    example: Option<Any>,
     examples: Option<BTreeMap<String, Referentable<Example>>>,
     content: Option<BTreeMap<String, MediaType>>,
 }
@@ -171,8 +171,8 @@ pub struct RequestBody {
 #[skip_serializing_none]
 #[derive(Debug, Serialize, Deserialize)]
 pub struct MediaType {
-    schema: Referentable<Schema>,
-    // todo example
+    schema: Option<Referentable<Schema>>,
+    example: Option<Any>,
     examples: Option<BTreeMap<String, Referentable<Example>>>,
     encoding: Option<BTreeMap<String, Encoding>>,
 }
@@ -208,6 +208,7 @@ pub struct Response {
 #[skip_serializing_none]
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Callback {
+    #[serde(flatten)]
     data: BTreeMap<String, PathItem>,
 }
 
@@ -217,8 +218,9 @@ pub struct Callback {
 pub struct Example {
     summary: Option<String>,
     description: Option<String>,
-    // todo value,
-    external_value: Option<String>,
+    value: Option<Any>,
+    #[serde(flatten)]
+    extras: Option<String>,
 }
 
 pub type Any = serde_json::Value;
@@ -228,7 +230,7 @@ pub type Any = serde_json::Value;
 #[serde(rename_all = "camelCase")]
 pub struct Link {
     operation_ref: Option<String>,
-    operation_id: Option<String>,
+    operation_id: String,
     parameters: Option<BTreeMap<String, Any>>,
     request_body: Option<Any>,
     description: Option<String>,
@@ -247,7 +249,7 @@ pub struct Header {
     explode: Option<bool>,
     allow_reserved: Option<bool>,
     schema: Option<Referentable<Schema>>,
-    // todo example
+    example: Option<Any>,
     examples: Option<BTreeMap<String, Referentable<Example>>>,
     content: Option<BTreeMap<String, MediaType>>,
 }
@@ -273,7 +275,7 @@ pub struct Reference {
 pub struct Schema {
     // todo
     #[serde(rename = "type")]
-    _type: String,
+    _type: Option<String>,
     format: Option<String>,
     nullable: Option<bool>,
     #[serde(flatten)]
@@ -361,7 +363,7 @@ mod test {
                 let new =
                     serde_json::to_value(&serde_json::from_str::<$t>($value).unwrap()).unwrap();
                 let original = serde_json::from_str::<serde_json::Value>($value).unwrap();
-                assert_json_eq!(new, original);
+                assert_json_eq!(dbg!(new), original);
             };
         }
         #[test]
@@ -370,6 +372,12 @@ mod test {
               OpenAPIV3,
               include_str!("../openapi3-examples/3.0/pass/swagger2openapi/openapi.json")
             }
+            pass! { OpenAPIV3, include_str!("../examples/v3.0/json/api-with-examples.json")}
+            pass! { OpenAPIV3, include_str!("../examples/v3.0/json/callback-example.json")}
+            pass! { OpenAPIV3, include_str!("../examples/v3.0/json/link-example.json")}
+            pass! { OpenAPIV3, include_str!("../examples/v3.0/json/petstore-expanded.json")}
+            pass! { OpenAPIV3, include_str!("../examples/v3.0/json/petstore.json")}
+            pass! { OpenAPIV3, include_str!("../examples/v3.0/json/uspto.json")}
         }
 
         #[test]
@@ -528,6 +536,60 @@ mod test {
                 }
               }
             "#### }
+
+            pass!{Responses, r##"
+            {
+              "200": {
+                "description": "200 response",
+                "content": {
+                  "application/json": {
+                    "examples": {
+                      "foo": {
+                        "value": {
+                          "versions": [
+                            {
+                              "status": "CURRENT",
+                              "updated": "2011-01-21T11:33:21Z",
+                              "id": "v2.0",
+                              "links": [
+                                {
+                                  "href": "http://127.0.0.1:8774/v2/",
+                                  "rel": "self"
+                                }
+                              ]
+                            },
+                            {
+                              "status": "EXPERIMENTAL",
+                              "updated": "2013-07-23T11:33:21Z",
+                              "id": "v3.0",
+                              "links": [
+                                {
+                                  "href": "http://127.0.0.1:8774/v3/",
+                                  "rel": "self"
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      }
+                    }
+                  }
+                }
+              },
+              "300": {
+                "description": "300 response",
+                "content": {
+                  "application/json": {
+                    "examples": {
+                      "foo": {
+                        "value": "{\n \"versions\": [\n       {\n         \"status\": \"CURRENT\",\n         \"updated\": \"2011-01-21T11:33:21Z\",\n         \"id\": \"v2.0\",\n         \"links\": [\n             {\n                 \"href\": \"http://127.0.0.1:8774/v2/\",\n                 \"rel\": \"self\"\n             }\n         ]\n     },\n     {\n         \"status\": \"EXPERIMENTAL\",\n         \"updated\": \"2013-07-23T11:33:21Z\",\n         \"id\": \"v3.0\",\n         \"links\": [\n             {\n                 \"href\": \"http://127.0.0.1:8774/v3/\",\n                 \"rel\": \"self\"\n             }\n         ]\n     }\n ]\n}\n"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+            "##}
         }
 
         #[test]
@@ -571,6 +633,69 @@ mod test {
                 "description": "Invalid username/password supplied"
               }
             "####}
+
+            pass!{Response, r###"
+            {
+              "description": "200 response",
+              "content": {
+                "application/json": {
+                  "examples": {
+                    "foo": {
+                      "value": {
+                        "versions": [
+                          {
+                            "status": "CURRENT",
+                            "updated": "2011-01-21T11:33:21Z",
+                            "id": "v2.0",
+                            "links": [
+                              {
+                                "href": "http://127.0.0.1:8774/v2/",
+                                "rel": "self"
+                              }
+                            ]
+                          },
+                          {
+                            "status": "EXPERIMENTAL",
+                            "updated": "2013-07-23T11:33:21Z",
+                            "id": "v3.0",
+                            "links": [
+                              {
+                                "href": "http://127.0.0.1:8774/v3/",
+                                "rel": "self"
+                              }
+                            ]
+                          }
+                        ]
+                      }
+                    }
+                  }
+                }
+              }
+            }
+            "###}
+
+            pass!{Response, r###"
+            {
+              "description": "subscription successfully created",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "description": "subscription information",
+                    "required": [
+                      "subscriptionId"
+                    ],
+                    "properties": {
+                      "subscriptionId": {
+                        "description": "this unique identifier allows management of the subscription",
+                        "type": "string",
+                        "example": "2531329f-fb09-4ef7-887e-84e648214436"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+            "###}
         }
 
         #[test]
