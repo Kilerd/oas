@@ -16,23 +16,23 @@ pub enum Referentable<T> {
 #[serde(rename_all = "camelCase")]
 pub struct OpenAPIV3 {
     /// This string MUST be the semantic version number of the OpenAPI Specification version that the OpenAPI document uses. The `openapi` field SHOULD be used by tooling specifications and clients to interpret the OpenAPI document. This is not related to the API info.version string.
-    openapi: String,
+    pub openapi: String,
     /// Provides metadata about the API
-    info: Info,
+    pub info: Info,
     /// An array of Server Objects, which provide connectivity information to a target server. If the `servers` property is not provided, or is an empty array, the default value would be a `Server` Object with a url value of `/`.
-    servers: Option<Vec<Server>>,
+    pub servers: Option<Vec<Server>>,
     /// The available paths and operations for the API.
-    paths: BTreeMap<String, PathItem>,
+    pub paths: BTreeMap<String, PathItem>,
     /// An element to hold various schemas for the specification.
-    components: Option<Components>,
+    pub components: Option<Components>,
     /// A declaration of which security mechanisms can be used across the API. The list of values includes alternative security requirement objects that can be used. Only one of the security requirement objects need to be satisfied to authorize a request. Individual operations can override this definition. To make security optional, an empty security requirement (`{}`) can be included in the array.
-    security: Option<Vec<SecurityRequirement>>,
+    pub security: Option<Vec<SecurityRequirement>>,
     /// A list of tags used by the specification with additional metadata. The order of the tags can be used to reflect on their order by the parsing tools. Not all tags that are used by the Operation Object must be declared. The tags that are not declared MAY be organized randomly or based on the tools' logic. Each tag name in the list MUST be unique.
-    tags: Option<Vec<Tag>>,
+    pub tags: Option<Vec<Tag>>,
     /// Additional external documentation.
-    external_docs: Option<ExternalDocumentation>,
+    pub external_docs: Option<ExternalDocumentation>,
     #[serde(flatten)]
-    extras: Option<BTreeMap<String, Any>>,
+    pub extras: Option<BTreeMap<String, Any>>,
 }
 
 /// The object provides metadata about the API. The metadata MAY be used by the clients if needed, and MAY be presented in editing or documentation generation tools for convenience.
@@ -41,17 +41,17 @@ pub struct OpenAPIV3 {
 #[serde(rename_all = "camelCase")]
 pub struct Info {
     /// The title of the API.
-    title: String,
+    pub title: String,
     /// A short description of the API. CommonMark syntax MAY be used for rich text representation.
-    description: Option<String>,
+    pub description: Option<String>,
     /// A URL to the Terms of Service for the API. MUST be in the format of a URL.
-    terms_of_service: Option<String>,
+    pub terms_of_service: Option<String>,
     /// The contact information for the exposed API.
-    contact: Option<Contact>,
+    pub contact: Option<Contact>,
     /// The license information for the exposed API.
-    license: Option<License>,
+    pub license: Option<License>,
     /// The version of the OpenAPI document (which is distinct from the OpenAPI Specification version or the API implementation version).
-    version: String,
+    pub version: String,
 }
 
 /// Contact information for the exposed API.
@@ -59,11 +59,11 @@ pub struct Info {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Contact {
     /// The identifying name of the contact person/organization.
-    name: Option<String>,
+    pub name: Option<String>,
     /// The URL pointing to the contact information. MUST be in the format of a URL.
-    url: Option<String>,
+    pub url: Option<String>,
     /// The email address of the contact person/organization. MUST be in the format of an email address.
-    email: Option<String>,
+    pub email: Option<String>,
 }
 
 /// License information for the exposed API.
@@ -71,9 +71,9 @@ pub struct Contact {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct License {
     /// The license name used for the API.
-    name: String,
+    pub name: String,
     /// A URL to the license used for the API. MUST be in the format of a URL.
-    url: Option<String>,
+    pub url: Option<String>,
 }
 
 /// An object representing a Server.
@@ -81,11 +81,11 @@ pub struct License {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Server {
     /// A URL to the target host. This URL supports Server Variables and MAY be relative, to indicate that the host location is relative to the location where the OpenAPI document is being served. Variable substitutions will be made when a variable is named in {brackets}.
-    url: String,
+    pub url: String,
     /// An optional string describing the host designated by the URL. CommonMark syntax MAY be used for rich text representation.
-    description: Option<String>,
+    pub description: Option<String>,
     /// A map between a variable name and its value. The value is used for substitution in the server's URL template.
-    variables: Option<BTreeMap<String, ServerVariable>>,
+    pub variables: Option<BTreeMap<String, ServerVariable>>,
 }
 
 /// An object representing a Server Variable for server URL template substitution.
@@ -94,11 +94,11 @@ pub struct Server {
 pub struct ServerVariable {
     /// An enumeration of string values to be used if the substitution options are from a limited set. The array SHOULD NOT be empty.
     #[serde(rename = "enum")]
-    _enum: Option<Vec<String>>,
+    pub _enum: Option<Vec<String>>,
     /// The default value to use for substitution, which SHALL be sent if an alternate value is not supplied. Note this behavior is different than the Schema Object's treatment of default values, because in those cases parameter values are optional. If the `enum` is defined, the value SHOULD exist in the enum's values.
-    default: String,
+    pub default: String,
     /// An optional description for the server variable. CommonMark syntax MAY be used for rich text representation.
-    description: Option<String>,
+    pub description: Option<String>,
 }
 
 /// Holds a set of reusable objects for different aspects of the OAS. All objects defined within the components object will have no effect on the API unless they are explicitly referenced from properties outside the components object.
@@ -107,23 +107,23 @@ pub struct ServerVariable {
 #[serde(rename_all = "camelCase")]
 pub struct Components {
     /// An object to hold reusable Schema Objects.
-    schemas: Option<BTreeMap<String, Referentable<Schema>>>,
+    pub schemas: Option<BTreeMap<String, Referentable<Schema>>>,
     /// An object to hold reusable Response Objects.
-    responses: Option<BTreeMap<String, Referentable<Response>>>,
+    pub responses: Option<BTreeMap<String, Referentable<Response>>>,
     /// An object to hold reusable Parameter Objects.
-    parameters: Option<BTreeMap<String, Referentable<Parameter>>>,
+    pub parameters: Option<BTreeMap<String, Referentable<Parameter>>>,
     /// An object to hold reusable Example Objects.
-    examples: Option<BTreeMap<String, Referentable<Example>>>,
+    pub examples: Option<BTreeMap<String, Referentable<Example>>>,
     /// An object to hold reusable Request Body Objects.
-    request_bodies: Option<BTreeMap<String, Referentable<RequestBody>>>,
+    pub request_bodies: Option<BTreeMap<String, Referentable<RequestBody>>>,
     /// An object to hold reusable Header Objects.
-    headers: Option<BTreeMap<String, Referentable<Header>>>,
+    pub headers: Option<BTreeMap<String, Referentable<Header>>>,
     /// An object to hold reusable Security Scheme Objects.
-    security_schemes: Option<BTreeMap<String, Referentable<SecurityScheme>>>,
+    pub security_schemes: Option<BTreeMap<String, Referentable<SecurityScheme>>>,
     /// An object to hold reusable Link Objects.
-    links: Option<BTreeMap<String, Referentable<Link>>>,
+    pub links: Option<BTreeMap<String, Referentable<Link>>>,
     /// An object to hold reusable Callback Objects.
-    callbacks: Option<BTreeMap<String, Referentable<Callback>>>,
+    pub callbacks: Option<BTreeMap<String, Referentable<Callback>>>,
 }
 
 /// Describes the operations available on a single path. A Path Item MAY be empty, due to ACL constraints. The path itself is still exposed to the documentation viewer but they will not know which operations and parameters are available.
@@ -132,31 +132,31 @@ pub struct Components {
 pub struct PathItem {
     /// Allows for an external definition of this path item. The referenced structure MUST be in the format of a Path Item Object. In case a Path Item Object field appears both in the defined object and the referenced object, the behavior is undefined.
     #[serde(rename = "$ref")]
-    _ref: Option<String>,
+    pub _ref: Option<String>,
     /// An optional, string summary, intended to apply to all operations in this path.
-    summary: Option<String>,
+    pub summary: Option<String>,
     /// An optional, string description, intended to apply to all operations in this path. CommonMark syntax MAY be used for rich text representation.
-    description: Option<String>,
+    pub description: Option<String>,
     /// A definition of a GET operation on this path.
-    get: Option<Operation>,
+    pub get: Option<Operation>,
     /// A definition of a PUT operation on this path.
-    put: Option<Operation>,
+    pub put: Option<Operation>,
     /// A definition of a POST operation on this path.
-    post: Option<Operation>,
+    pub post: Option<Operation>,
     /// A definition of a DELETE operation on this path.
-    delete: Option<Operation>,
+    pub delete: Option<Operation>,
     /// A definition of a OPTIONS operation on this path.
-    options: Option<Operation>,
+    pub options: Option<Operation>,
     /// A definition of a HEAD operation on this path.
-    head: Option<Operation>,
+    pub head: Option<Operation>,
     /// A definition of a PATCH operation on this path.
-    patch: Option<Operation>,
+    pub patch: Option<Operation>,
     /// A definition of a TRACE operation on this path.
-    trace: Option<Operation>,
+    pub trace: Option<Operation>,
     /// An alternative `server` array to service all operations in this path.
-    servers: Option<Vec<Server>>,
+    pub servers: Option<Vec<Server>>,
     /// A list of parameters that are applicable for all the operations described under this path. These parameters can be overridden at the operation level, but cannot be removed there. The list MUST NOT include duplicated parameters. A unique parameter is defined by a combination of a name and location. The list can use the Reference Object to link to parameters that are defined at the OpenAPI Object's components/parameters.
-    parameters: Option<Vec<Referentable<Parameter>>>,
+    pub parameters: Option<Vec<Referentable<Parameter>>>,
 }
 
 /// Describes a single API operation on a path.
@@ -165,29 +165,29 @@ pub struct PathItem {
 #[serde(rename_all = "camelCase")]
 pub struct Operation {
     /// A list of tags for API documentation control. Tags can be used for logical grouping of operations by resources or any other qualifier.
-    tags: Option<Vec<String>>,
-    ///A short summary of what the operation does.
-    summary: Option<String>,
+    pub tags: Option<Vec<String>>,
+    /// A short summary of what the operation does.
+    pub summary: Option<String>,
     /// A verbose explanation of the operation behavior. CommonMark syntax MAY be used for rich text representation.
-    description: Option<String>,
+    pub description: Option<String>,
     /// Additional external documentation for this operation.
-    external_docs: Option<ExternalDocumentation>,
+    pub external_docs: Option<ExternalDocumentation>,
     /// Unique string used to identify the operation. The id MUST be unique among all operations described in the API. The operationId value is case-sensitive. Tools and libraries MAY use the operationId to uniquely identify an operation, therefore, it is RECOMMENDED to follow common programming naming conventions.
-    operation_id: Option<String>,
+    pub operation_id: Option<String>,
     /// A list of parameters that are applicable for this operation. If a parameter is already defined at the Path Item, the new definition will override it but can never remove it. The list MUST NOT include duplicated parameters. A unique parameter is defined by a combination of a name and location. The list can use the Reference Object to link to parameters that are defined at the OpenAPI Object's components/parameters.
-    parameters: Option<Vec<Referentable<Parameter>>>,
+    pub parameters: Option<Vec<Referentable<Parameter>>>,
     /// The request body applicable for this operation. The requestBody is only supported in HTTP methods where the HTTP 1.1 specification RFC7231 has explicitly defined semantics for request bodies. In other cases where the HTTP spec is vague, requestBody SHALL be ignored by consumers.
-    request_body: Option<Referentable<RequestBody>>,
+    pub request_body: Option<Referentable<RequestBody>>,
     /// The list of possible responses as they are returned from executing this operation.
-    responses: Responses,
+    pub responses: Responses,
     /// A map of possible out-of band callbacks related to the parent operation. The key is a unique identifier for the Callback Object. Each value in the map is a Callback Object that describes a request that may be initiated by the API provider and the expected responses.
-    callbacks: Option<BTreeMap<String, Referentable<Callback>>>,
+    pub callbacks: Option<BTreeMap<String, Referentable<Callback>>>,
     /// Declares this operation to be deprecated. Consumers SHOULD refrain from usage of the declared operation. Default value is `false`.
-    deprecated: Option<bool>,
+    pub deprecated: Option<bool>,
     /// A declaration of which security mechanisms can be used for this operation. The list of values includes alternative security requirement objects that can be used. Only one of the security requirement objects need to be satisfied to authorize a request. To make security optional, an empty security requirement (`{}`) can be included in the array. This definition overrides any declared top-level security. To remove a top-level security declaration, an empty array can be used.
-    security: Option<Vec<SecurityRequirement>>,
+    pub security: Option<Vec<SecurityRequirement>>,
     /// An alternative server array to service this operation. If an alternative server object is specified at the Path Item Object or Root level, it will be overridden by this value.
-    servers: Option<Vec<Server>>,
+    pub servers: Option<Vec<Server>>,
 }
 
 /// Allows referencing an external resource for extended documentation.
@@ -195,9 +195,9 @@ pub struct Operation {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ExternalDocumentation {
     /// A short description of the target documentation. CommonMark syntax MAY be used for rich text representation.
-    description: Option<String>,
+    pub description: Option<String>,
     /// The URL for the target documentation. Value MUST be in the format of a URL.
-    url: String,
+    pub url: String,
 }
 
 /// The location of the parameter
@@ -224,30 +224,30 @@ pub enum ParameterIn {
 #[serde(rename_all = "camelCase")]
 pub struct Parameter {
     /// The name of the parameter
-    name: String,
+    pub name: String,
     /// The location of the parameter
     #[serde(alias = "in")]
-    _in: ParameterIn,
+    pub _in: ParameterIn,
     /// A brief description of the parameter. This could contain examples of use. CommonMark syntax MAY be used for rich text representation.
-    description: Option<String>,
+    pub description: Option<String>,
     /// Determines whether this parameter is mandatory
-    required: Option<bool>,
+    pub required: Option<bool>,
     /// Specifies that a parameter is deprecated and SHOULD be transitioned out of usage. Default value is `false`.
-    deprecated: Option<bool>,
+    pub deprecated: Option<bool>,
     /// Sets the ability to pass empty-valued parameters
-    allow_empty_value: Option<bool>,
+    pub allow_empty_value: Option<bool>,
     /// Describes how the parameter value will be serialized depending on the type of the parameter value
-    style: Option<String>,
-    explode: Option<bool>,
-    allow_reserved: Option<bool>,
+    pub style: Option<String>,
+    pub explode: Option<bool>,
+    pub allow_reserved: Option<bool>,
     /// The schema defining the type used for the parameter.
-    schema: Option<Referentable<Schema>>,
+    pub schema: Option<Referentable<Schema>>,
     /// Example of the parameter's potential value.
-    example: Option<Any>,
+    pub example: Option<Any>,
     /// Examples of the parameter's potential value.
-    examples: Option<BTreeMap<String, Referentable<Example>>>,
+    pub examples: Option<BTreeMap<String, Referentable<Example>>>,
     /// A map containing the representations for the parameter. The key is the media type and the value describes it.
-    content: Option<BTreeMap<String, MediaType>>,
+    pub content: Option<BTreeMap<String, MediaType>>,
 }
 
 /// Describes a single request body.
@@ -255,11 +255,11 @@ pub struct Parameter {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct RequestBody {
     /// A brief description of the request body.
-    description: Option<String>,
+    pub description: Option<String>,
     /// Determines if the request body is required in the request. Defaults to `false`.
-    required: Option<bool>,
+    pub required: Option<bool>,
     /// The content of the request body.
-    content: BTreeMap<String, MediaType>,
+    pub content: BTreeMap<String, MediaType>,
 }
 
 /// Each Media Type Object provides schema and examples for the media type identified by its key.
@@ -267,43 +267,41 @@ pub struct RequestBody {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct MediaType {
     /// The schema defining the content of the request, response, or parameter.
-    schema: Option<Referentable<Schema>>,
+    pub schema: Option<Referentable<Schema>>,
     /// Example of the media type.
-    example: Option<Any>,
+    pub example: Option<Any>,
     /// Examples of the media type.
-    examples: Option<BTreeMap<String, Referentable<Example>>>,
+    pub examples: Option<BTreeMap<String, Referentable<Example>>>,
     /// A map between a property name and its encoding information.
-    encoding: Option<BTreeMap<String, Encoding>>,
+    pub encoding: Option<BTreeMap<String, Encoding>>,
 }
 
 /// A single encoding definition applied to a single schema property.
-
 #[skip_serializing_none]
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Encoding {
     /// The Content-Type for encoding a specific property.
-    content_type: Option<String>,
+    pub content_type: Option<String>,
     /// map allowing additional information to be provided as headers, for example `Content-Disposition`. `Content-Type` is described separately and SHALL be ignored in this section. This property SHALL be ignored if the request body media type is not a `multipart`.
-    headers: Option<BTreeMap<String, Referentable<Header>>>,
+    pub headers: Option<BTreeMap<String, Referentable<Header>>>,
     /// Describes how a specific property value will be serialized depending on its type.
-    style: Option<String>,
-    explode: Option<bool>,
-    allow_reserved: Option<bool>,
+    pub style: Option<String>,
+    pub explode: Option<bool>,
+    pub allow_reserved: Option<bool>,
 }
 
 /// A container for the expected responses of an operation. The container maps a HTTP response code to the expected response.
 /// The documentation is not necessarily expected to cover all possible HTTP response codes because they may not be known in advance. However, documentation is expected to cover a successful operation response and any known errors.
 /// The default MAY be used as a default response object for all HTTP codes that are not covered individually by the specification.
 /// The Responses Object MUST contain at least one response code, and it SHOULD be the response for a successful operation call.
-
 #[skip_serializing_none]
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Responses {
     /// The documentation of responses other than the ones declared for specific HTTP response codes. Use this field to cover undeclared responses. A Reference Object can link to a response that the OpenAPI Object's components/responses section defines.
-    default: Option<Referentable<Response>>,
+    pub default: Option<Referentable<Response>>,
     #[serde(flatten)]
-    data: BTreeMap<String, Referentable<Response>>,
+    pub data: BTreeMap<String, Referentable<Response>>,
 }
 
 /// Describes a single response from an API Operation, including design-time, static `links` to operations based on the response.
@@ -311,13 +309,13 @@ pub struct Responses {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Response {
     /// A short description of the response.
-    description: String,
+    pub description: String,
     /// Maps a header name to its definition.
-    headers: Option<BTreeMap<String, Referentable<Header>>>,
+    pub headers: Option<BTreeMap<String, Referentable<Header>>>,
     /// A map containing descriptions of potential response payloads.
-    content: Option<BTreeMap<String, MediaType>>,
+    pub content: Option<BTreeMap<String, MediaType>>,
     /// A map of operations links that can be followed from the response.
-    links: Option<BTreeMap<String, Referentable<Link>>>,
+    pub links: Option<BTreeMap<String, Referentable<Link>>>,
 }
 
 /// A map of possible out-of band callbacks related to the parent operation. Each value in the map is a Path Item Object that describes a set of requests that may be initiated by the API provider and the expected responses. The key value used to identify the path item object is an expression, evaluated at runtime, that identifies a URL to use for the callback operation.
@@ -325,7 +323,7 @@ pub struct Response {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Callback {
     #[serde(flatten)]
-    data: BTreeMap<String, PathItem>,
+    pub data: BTreeMap<String, PathItem>,
 }
 
 #[skip_serializing_none]
@@ -333,12 +331,12 @@ pub struct Callback {
 #[serde(rename_all = "camelCase")]
 pub struct Example {
     /// Short description for the example.
-    summary: Option<String>,
+    pub summary: Option<String>,
     /// Long description for the example.
-    description: Option<String>,
+    pub description: Option<String>,
     /// Embedded literal example.
-    value: Option<Any>,
-    external_value: Option<String>,
+    pub value: Option<Any>,
+    pub external_value: Option<String>,
 }
 
 pub type Any = serde_json::Value;
@@ -349,48 +347,47 @@ pub type Any = serde_json::Value;
 #[serde(rename_all = "camelCase")]
 pub struct Link {
     /// A relative or absolute URI reference to an OAS operation.
-    operation_ref: Option<String>,
+    pub operation_ref: Option<String>,
     /// The name of an existing, resolvable OAS operation
-    operation_id: String,
+    pub operation_id: String,
     /// A map representing parameters to pass to an operation as specified with `operation_id` or identified via `operation_ef`.
-    parameters: Option<BTreeMap<String, Any>>,
+    pub parameters: Option<BTreeMap<String, Any>>,
     /// A literal value or `{expression}` to use as a request body when calling the target operation.
-    request_body: Option<Any>,
+    pub request_body: Option<Any>,
     /// A description of the link.
-    description: Option<String>,
+    pub description: Option<String>,
     /// A server object to be used by the target operation.
-    server: Option<Server>,
+    pub server: Option<Server>,
 }
 
 #[skip_serializing_none]
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Header {
-    description: Option<String>,
-    required: Option<bool>,
-    deprecated: Option<bool>,
-    allow_empty_value: Option<bool>,
-    style: Option<String>,
-    explode: Option<bool>,
-    allow_reserved: Option<bool>,
-    schema: Option<Referentable<Schema>>,
-    example: Option<Any>,
-    examples: Option<BTreeMap<String, Referentable<Example>>>,
-    content: Option<BTreeMap<String, MediaType>>,
+    pub description: Option<String>,
+    pub required: Option<bool>,
+    pub deprecated: Option<bool>,
+    pub allow_empty_value: Option<bool>,
+    pub style: Option<String>,
+    pub explode: Option<bool>,
+    pub allow_reserved: Option<bool>,
+    pub schema: Option<Referentable<Schema>>,
+    pub example: Option<Any>,
+    pub examples: Option<BTreeMap<String, Referentable<Example>>>,
+    pub content: Option<BTreeMap<String, MediaType>>,
 }
 
 /// Adds metadata to a single tag that is used by the `Operation` Object. It is not mandatory to have a Tag Object per tag defined in the Operation Object instances.
-
 #[skip_serializing_none]
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Tag {
     /// The name of the tag.
-    name: String,
+    pub name: String,
     /// A short description for the tag.
-    description: Option<String>,
+    pub description: Option<String>,
     /// Additional external documentation for this tag.
-    external_docs: Option<ExternalDocumentation>,
+    pub external_docs: Option<ExternalDocumentation>,
 }
 
 /// A simple object to allow referencing other components in the specification, internally and externally.
@@ -399,7 +396,7 @@ pub struct Tag {
 pub struct Reference {
     /// The reference string.
     #[serde(rename = "$ref")]
-    _ref: String,
+    pub _ref: String,
 }
 
 /// The Schema Object allows the definition of input and output data types. These types can be objects, but also primitives and arrays.
@@ -407,11 +404,11 @@ pub struct Reference {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Schema {
     #[serde(rename = "type")]
-    _type: Option<String>,
-    format: Option<String>,
-    nullable: Option<bool>,
+    pub _type: Option<String>,
+    pub format: Option<String>,
+    pub nullable: Option<bool>,
     #[serde(flatten)]
-    extras: BTreeMap<String, Any>,
+    pub extras: BTreeMap<String, Any>,
 }
 
 /// When request bodies or response payloads may be one of a number of different schemas, a `discriminator` object can be used to aid in serialization, deserialization, and validation. The discriminator is a specific object in a schema which is used to inform the consumer of the specification of an alternative schema based on the value associated with it.
@@ -422,9 +419,9 @@ pub struct Schema {
 #[serde(rename_all = "camelCase")]
 pub struct Discriminator {
     /// The name of the property in the payload that will hold the discriminator value.
-    property_name: String,
+    pub property_name: String,
     /// An object to hold mappings between payload values and schema names or references.
-    maapping: Option<BTreeMap<String, String>>,
+    pub maapping: Option<BTreeMap<String, String>>,
 }
 
 /// The type of the security scheme.
@@ -462,9 +459,9 @@ pub enum SecurityType {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct SecurityScheme {
     #[serde(flatten)]
-    _type: SecurityType,
+    pub _type: SecurityType,
     /// A short description for security scheme.
-    description: Option<String>,
+    pub description: Option<String>,
 }
 
 // todo should be enum
@@ -473,13 +470,13 @@ pub struct SecurityScheme {
 #[serde(rename_all = "camelCase")]
 pub struct OauthFlows {
     /// Configuration for the OAuth Implicit flow
-    implicit: Option<OauthFlow>,
+    pub implicit: Option<OauthFlow>,
     /// Configuration for the OAuth Resource Owner Password flow
-    password: Option<OauthFlow>,
+    pub password: Option<OauthFlow>,
     /// Configuration for the OAuth Client Credentials flow.
-    client_credentials: Option<OauthFlow>,
+    pub client_credentials: Option<OauthFlow>,
     /// Configuration for the OAuth Authorization Code flow.
-    authorization_code: Option<OauthFlow>,
+    pub authorization_code: Option<OauthFlow>,
 }
 
 /// Configuration details for a supported OAuth Flow
@@ -488,13 +485,13 @@ pub struct OauthFlows {
 #[serde(rename_all = "camelCase")]
 pub struct OauthFlow {
     /// The authorization URL to be used for this flow. This MUST be in the form of a URL.
-    authorization_url: String,
+    pub authorization_url: String,
     /// he token URL to be used for this flow. This MUST be in the form of a URL.
-    token_url: Option<String>,
+    pub token_url: Option<String>,
     /// The URL to be used for obtaining refresh tokens. This MUST be in the form of a URL.
-    refresh_url: Option<String>,
+    pub refresh_url: Option<String>,
     /// The available scopes for the OAuth2 security scheme. A map between the scope name and a short description for it. The map MAY be empty.
-    scopes: BTreeMap<String, String>,
+    pub scopes: BTreeMap<String, String>,
 }
 
 /// Lists the required security schemes to execute this operation.
@@ -503,7 +500,7 @@ pub struct OauthFlow {
 #[serde(transparent)]
 pub struct SecurityRequirement {
     #[serde(flatten)]
-    data: BTreeMap<String, Vec<String>>,
+    pub data: BTreeMap<String, Vec<String>>,
 }
 
 #[cfg(test)]
@@ -615,6 +612,7 @@ mod test {
             "####
             }
         }
+
         #[test]
         fn should_pass_schema() {
             pass! { Schema, r####"{
@@ -785,6 +783,7 @@ mod test {
               }
             "####}
         }
+
         #[test]
         fn should_pass_response_2() {
             pass! { Response, r####"{
