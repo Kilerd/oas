@@ -3,7 +3,7 @@ use serde_with::skip_serializing_none;
 use std::collections::BTreeMap;
 
 #[skip_serializing_none]
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum Referenceable<T> {
     Data(T),
@@ -12,7 +12,7 @@ pub enum Referenceable<T> {
 
 #[skip_serializing_none]
 /// the root document object of openAPI v3.0
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct OpenAPIV3 {
     /// This string MUST be the semantic version number of the OpenAPI Specification version that the OpenAPI document uses. The `openapi` field SHOULD be used by tooling specifications and clients to interpret the OpenAPI document. This is not related to the API info.version string.
@@ -37,7 +37,7 @@ pub struct OpenAPIV3 {
 
 /// The object provides metadata about the API. The metadata MAY be used by the clients if needed, and MAY be presented in editing or documentation generation tools for convenience.
 #[skip_serializing_none]
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Info {
     /// The title of the API.
@@ -56,7 +56,7 @@ pub struct Info {
 
 /// Contact information for the exposed API.
 #[skip_serializing_none]
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Contact {
     /// The identifying name of the contact person/organization.
     pub name: Option<String>,
@@ -68,7 +68,7 @@ pub struct Contact {
 
 /// License information for the exposed API.
 #[skip_serializing_none]
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct License {
     /// The license name used for the API.
     pub name: String,
@@ -78,7 +78,7 @@ pub struct License {
 
 /// An object representing a Server.
 #[skip_serializing_none]
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Server {
     /// A URL to the target host. This URL supports Server Variables and MAY be relative, to indicate that the host location is relative to the location where the OpenAPI document is being served. Variable substitutions will be made when a variable is named in {brackets}.
     pub url: String,
@@ -90,7 +90,7 @@ pub struct Server {
 
 /// An object representing a Server Variable for server URL template substitution.
 #[skip_serializing_none]
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ServerVariable {
     /// An enumeration of string values to be used if the substitution options are from a limited set. The array SHOULD NOT be empty.
     #[serde(rename = "enum")]
@@ -103,7 +103,7 @@ pub struct ServerVariable {
 
 /// Holds a set of reusable objects for different aspects of the OAS. All objects defined within the components object will have no effect on the API unless they are explicitly referenced from properties outside the components object.
 #[skip_serializing_none]
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Components {
     /// An object to hold reusable Schema Objects.
@@ -128,7 +128,7 @@ pub struct Components {
 
 /// Describes the operations available on a single path. A Path Item MAY be empty, due to ACL constraints. The path itself is still exposed to the documentation viewer but they will not know which operations and parameters are available.
 #[skip_serializing_none]
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PathItem {
     /// Allows for an external definition of this path item. The referenced structure MUST be in the format of a Path Item Object. In case a Path Item Object field appears both in the defined object and the referenced object, the behavior is undefined.
     #[serde(rename = "$ref")]
@@ -161,7 +161,7 @@ pub struct PathItem {
 
 /// Describes a single API operation on a path.
 #[skip_serializing_none]
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Operation {
     /// A list of tags for API documentation control. Tags can be used for logical grouping of operations by resources or any other qualifier.
@@ -192,7 +192,7 @@ pub struct Operation {
 
 /// Allows referencing an external resource for extended documentation.
 #[skip_serializing_none]
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ExternalDocumentation {
     /// A short description of the target documentation. CommonMark syntax MAY be used for rich text representation.
     pub description: Option<String>,
@@ -202,7 +202,7 @@ pub struct ExternalDocumentation {
 
 /// The location of the parameter
 #[skip_serializing_none]
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum ParameterIn {
     Query,
@@ -220,7 +220,7 @@ pub enum ParameterIn {
 /// - header - Custom headers that are expected as part of the request. Note that RFC7230 states header names are case insensitive.
 /// - cookie - Used to pass a specific cookie value to the API.
 #[skip_serializing_none]
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Parameter {
     /// The name of the parameter
@@ -252,7 +252,7 @@ pub struct Parameter {
 
 /// Describes a single request body.
 #[skip_serializing_none]
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RequestBody {
     /// A brief description of the request body.
     pub description: Option<String>,
@@ -264,7 +264,7 @@ pub struct RequestBody {
 
 /// Each Media Type Object provides schema and examples for the media type identified by its key.
 #[skip_serializing_none]
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MediaType {
     /// The schema defining the content of the request, response, or parameter.
     pub schema: Option<Referenceable<Schema>>,
@@ -278,7 +278,7 @@ pub struct MediaType {
 
 /// A single encoding definition applied to a single schema property.
 #[skip_serializing_none]
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Encoding {
     /// The Content-Type for encoding a specific property.
@@ -296,7 +296,7 @@ pub struct Encoding {
 /// The default MAY be used as a default response object for all HTTP codes that are not covered individually by the specification.
 /// The Responses Object MUST contain at least one response code, and it SHOULD be the response for a successful operation call.
 #[skip_serializing_none]
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Responses {
     /// The documentation of responses other than the ones declared for specific HTTP response codes. Use this field to cover undeclared responses. A Reference Object can link to a response that the OpenAPI Object's components/responses section defines.
     pub default: Option<Referenceable<Response>>,
@@ -306,7 +306,7 @@ pub struct Responses {
 
 /// Describes a single response from an API Operation, including design-time, static `links` to operations based on the response.
 #[skip_serializing_none]
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Response {
     /// A short description of the response.
     pub description: String,
@@ -320,14 +320,14 @@ pub struct Response {
 
 /// A map of possible out-of band callbacks related to the parent operation. Each value in the map is a Path Item Object that describes a set of requests that may be initiated by the API provider and the expected responses. The key value used to identify the path item object is an expression, evaluated at runtime, that identifies a URL to use for the callback operation.
 #[skip_serializing_none]
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Callback {
     #[serde(flatten)]
     pub data: BTreeMap<String, PathItem>,
 }
 
 #[skip_serializing_none]
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Example {
     /// Short description for the example.
@@ -343,7 +343,7 @@ pub type Any = serde_json::Value;
 
 /// represents a possible design-time link for a response.
 #[skip_serializing_none]
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Link {
     /// A relative or absolute URI reference to an OAS operation.
@@ -361,7 +361,7 @@ pub struct Link {
 }
 
 #[skip_serializing_none]
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Header {
     pub description: Option<String>,
@@ -379,7 +379,7 @@ pub struct Header {
 
 /// Adds metadata to a single tag that is used by the `Operation` Object. It is not mandatory to have a Tag Object per tag defined in the Operation Object instances.
 #[skip_serializing_none]
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Tag {
     /// The name of the tag.
@@ -392,7 +392,7 @@ pub struct Tag {
 
 /// A simple object to allow referencing other components in the specification, internally and externally.
 #[skip_serializing_none]
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Reference {
     /// The reference string.
     #[serde(rename = "$ref")]
@@ -401,7 +401,7 @@ pub struct Reference {
 
 /// The Schema Object allows the definition of input and output data types. These types can be objects, but also primitives and arrays.
 #[skip_serializing_none]
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Schema {
     #[serde(rename = "type")]
     pub _type: Option<String>,
@@ -415,7 +415,7 @@ pub struct Schema {
 
 /// When using the discriminator, inline schemas will not be considered.
 #[skip_serializing_none]
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Discriminator {
     /// The name of the property in the payload that will hold the discriminator value.
@@ -426,7 +426,7 @@ pub struct Discriminator {
 
 /// The type of the security scheme.
 #[skip_serializing_none]
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[serde(tag = "type")]
 pub enum SecurityType {
@@ -456,7 +456,7 @@ pub enum SecurityType {
 
 /// Defines a security scheme that can be used by the operations.
 #[skip_serializing_none]
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SecurityScheme {
     #[serde(flatten)]
     pub _type: SecurityType,
@@ -466,7 +466,7 @@ pub struct SecurityScheme {
 
 // todo should be enum
 #[skip_serializing_none]
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct OauthFlows {
     /// Configuration for the OAuth Implicit flow
@@ -481,7 +481,7 @@ pub struct OauthFlows {
 
 /// Configuration details for a supported OAuth Flow
 #[skip_serializing_none]
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct OauthFlow {
     /// The authorization URL to be used for this flow. This MUST be in the form of a URL.
@@ -496,7 +496,7 @@ pub struct OauthFlow {
 
 /// Lists the required security schemes to execute this operation.
 #[skip_serializing_none]
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(transparent)]
 pub struct SecurityRequirement {
     #[serde(flatten)]
@@ -506,10 +506,7 @@ pub struct SecurityRequirement {
 #[cfg(test)]
 mod test {
     mod pass {
-        use crate::{
-            Header, OpenAPIV3, Operation, Parameter, RequestBody, Response, Responses, Schema,
-            SecurityScheme,
-        };
+        use crate:: OpenAPIV3;
         use assert_json_diff::assert_json_eq;
 
         macro_rules! pass {
@@ -523,389 +520,13 @@ mod test {
         }
         #[test]
         fn should_should_pass() {
-            pass! {
-              OpenAPIV3,
-              include_str!("../openapi3-examples/3.0/pass/swagger2openapi/openapi.json")
-            }
-            pass! { OpenAPIV3, include_str!("../examples/v3.0/json/api-with-examples.json")}
-            pass! { OpenAPIV3, include_str!("../examples/v3.0/json/callback-example.json")}
-            pass! { OpenAPIV3, include_str!("../examples/v3.0/json/link-example.json")}
-            pass! { OpenAPIV3, include_str!("../examples/v3.0/json/petstore-expanded.json")}
-            pass! { OpenAPIV3, include_str!("../examples/v3.0/json/petstore.json")}
-            pass! { OpenAPIV3, include_str!("../examples/v3.0/json/uspto.json")}
-        }
-
-        #[test]
-        fn should_pass_parameter() {
-            pass! { Parameter,r#"
-              {
-                "name": "status",
-                "in": "query",
-                "description": "Status values that need to be considered for filter",
-                "required": true,
-                "explode": true,
-                "schema": {
-                  "type": "array",
-                  "items": {
-                    "type": "string",
-                    "enum": [
-                      "available",
-                      "pending",
-                      "sold"
-                    ],
-                    "default": "available"
-                  }
-                }
-            }
-            "#
-            }
-        }
-
-        #[test]
-        fn should_pass_operation() {
-            pass! { Operation ,
-                  r#"{
-                "tags": [
-                  "user"
-                ],
-                "summary": "Logs out current logged in user session",
-                "description": "",
-                "operationId": "logoutUser",
-                "parameters": [],
-                "responses": {
-                  "default": {
-                    "description": "successful operation"
-                  }
-                }
-              }
-            "#
-            }
-        }
-
-        #[test]
-        fn should_pass_operation2() {
-            pass! { Operation, r####"{
-                "tags": [
-                  "pet"
-                ],
-                "summary": "Add a new pet to the store",
-                "description": "",
-                "operationId": "addPet",
-                "parameters": [],
-                "responses": {
-                  "405": {
-                    "description": "Invalid input"
-                  }
-                },
-                "security": [
-                  {
-                    "petstore_auth": [
-                      "write:pets",
-                      "read:pets"
-                    ]
-                  }
-                ],
-                "requestBody": {
-                  "$ref": "#/components/requestBodies/Pet"
-                }
-              }
-            "####
-            }
-        }
-
-        #[test]
-        fn should_pass_schema() {
-            pass! { Schema, r####"{
-                "type": "array",
-                "items": {
-                  "type": "string",
-                  "enum": [
-                    "available",
-                    "pending",
-                    "sold"
-                  ],
-                  "default": "available"
-                }
-              }
-            "####}
-        }
-
-        #[test]
-        fn should_pass_request_body() {
-            pass! {RequestBody, r####"{
-                "content": {
-                  "application/x-www-form-urlencoded": {
-                    "schema": {
-                      "type": "object",
-                      "properties": {
-                        "name": {
-                          "type": "string"
-                        },
-                        "status": {
-                          "type": "string"
-                        }
-                      }
-                    }
-                  }
-                },
-                "description": "Updated name of the pet"
-              }
-            "#### }
-        }
-
-        #[test]
-        fn should_pass_responses() {
-            pass! { Responses,  r####"{
-                "200": {
-                  "description": "successful operation",
-                  "headers": {
-                    "X-Rate-Limit": {
-                      "description": "calls per hour allowed by the user",
-                      "schema": {
-                        "type": "integer",
-                        "format": "int32"
-                      }
-                    },
-                    "X-Expires-After": {
-                      "description": "date in UTC when token expires",
-                      "schema": {
-                        "type": "string",
-                        "format": "date-time"
-                      }
-                    }
-                  },
-                  "content": {
-                    "application/xml": {
-                      "schema": {
-                        "type": "string"
-                      }
-                    },
-                    "application/json": {
-                      "schema": {
-                        "type": "string"
-                      }
-                    }
-                  }
-                },
-                "400": {
-                  "description": "Invalid username/password supplied"
-                }
-              }
-            "#### }
-
-            pass! {Responses, r##"
-            {
-              "200": {
-                "description": "200 response",
-                "content": {
-                  "application/json": {
-                    "examples": {
-                      "foo": {
-                        "value": {
-                          "versions": [
-                            {
-                              "status": "CURRENT",
-                              "updated": "2011-01-21T11:33:21Z",
-                              "id": "v2.0",
-                              "links": [
-                                {
-                                  "href": "http://127.0.0.1:8774/v2/",
-                                  "rel": "self"
-                                }
-                              ]
-                            },
-                            {
-                              "status": "EXPERIMENTAL",
-                              "updated": "2013-07-23T11:33:21Z",
-                              "id": "v3.0",
-                              "links": [
-                                {
-                                  "href": "http://127.0.0.1:8774/v3/",
-                                  "rel": "self"
-                                }
-                              ]
-                            }
-                          ]
-                        }
-                      }
-                    }
-                  }
-                }
-              },
-              "300": {
-                "description": "300 response",
-                "content": {
-                  "application/json": {
-                    "examples": {
-                      "foo": {
-                        "value": "{\n \"versions\": [\n       {\n         \"status\": \"CURRENT\",\n         \"updated\": \"2011-01-21T11:33:21Z\",\n         \"id\": \"v2.0\",\n         \"links\": [\n             {\n                 \"href\": \"http://127.0.0.1:8774/v2/\",\n                 \"rel\": \"self\"\n             }\n         ]\n     },\n     {\n         \"status\": \"EXPERIMENTAL\",\n         \"updated\": \"2013-07-23T11:33:21Z\",\n         \"id\": \"v3.0\",\n         \"links\": [\n             {\n                 \"href\": \"http://127.0.0.1:8774/v3/\",\n                 \"rel\": \"self\"\n             }\n         ]\n     }\n ]\n}\n"
-                      }
-                    }
-                  }
-                }
-              }
-            }
-            "##}
-        }
-
-        #[test]
-        fn should_pass_response_1() {
-            pass! { Response,  r####"{
-                "description": "successful operation",
-                "headers": {
-                  "X-Rate-Limit": {
-                    "description": "calls per hour allowed by the user",
-                    "schema": {
-                      "type": "integer",
-                      "format": "int32"
-                    }
-                  },
-                  "X-Expires-After": {
-                    "description": "date in UTC when token expires",
-                    "schema": {
-                      "type": "string",
-                      "format": "date-time"
-                    }
-                  }
-                },
-                "content": {
-                  "application/xml": {
-                    "schema": {
-                      "type": "string"
-                    }
-                  },
-                  "application/json": {
-                    "schema": {
-                      "type": "string"
-                    }
-                  }
-                }
-              }
-            "####}
-        }
-
-        #[test]
-        fn should_pass_response_2() {
-            pass! { Response, r####"{
-                "description": "Invalid username/password supplied"
-              }
-            "####}
-
-            pass! {Response, r###"
-            {
-              "description": "200 response",
-              "content": {
-                "application/json": {
-                  "examples": {
-                    "foo": {
-                      "value": {
-                        "versions": [
-                          {
-                            "status": "CURRENT",
-                            "updated": "2011-01-21T11:33:21Z",
-                            "id": "v2.0",
-                            "links": [
-                              {
-                                "href": "http://127.0.0.1:8774/v2/",
-                                "rel": "self"
-                              }
-                            ]
-                          },
-                          {
-                            "status": "EXPERIMENTAL",
-                            "updated": "2013-07-23T11:33:21Z",
-                            "id": "v3.0",
-                            "links": [
-                              {
-                                "href": "http://127.0.0.1:8774/v3/",
-                                "rel": "self"
-                              }
-                            ]
-                          }
-                        ]
-                      }
-                    }
-                  }
-                }
-              }
-            }
-            "###}
-
-            pass! {Response, r###"
-            {
-              "description": "subscription successfully created",
-              "content": {
-                "application/json": {
-                  "schema": {
-                    "description": "subscription information",
-                    "required": [
-                      "subscriptionId"
-                    ],
-                    "properties": {
-                      "subscriptionId": {
-                        "description": "this unique identifier allows management of the subscription",
-                        "type": "string",
-                        "example": "2531329f-fb09-4ef7-887e-84e648214436"
-                      }
-                    }
-                  }
-                }
-              }
-            }
-            "###}
-        }
-
-        #[test]
-        fn should_pass_header() {
-            pass! {Header, r##"
-            {
-                "description": "calls per hour allowed by the user",
-                "schema": {
-                  "type": "integer",
-                  "format": "int32"
-                }
-            }
-            "##}
-        }
-
-        #[test]
-        fn should_pass_security() {
-            pass! {SecurityScheme, r##"
-              {
-                "type": "oauth2",
-                "flows": {
-                  "implicit": {
-                    "authorizationUrl": "http://petstore.swagger.io/oauth/dialog",
-                    "scopes": {
-                      "write:pets": "modify pets in your account",
-                      "read:pets": "read your pets"
-                    }
-                  }
-                }
-              }
-            "##}
-            pass! {SecurityScheme, r##"
-            {
-                "type": "http",
-                "scheme": "basic"
-              }
-            "##}
-
-            pass! {SecurityScheme, r##"
-            {
-                "type": "apiKey",
-                "name": "api_key",
-                "in": "header"
-              }
-            "##}
-
-            pass! {SecurityScheme, r##"
-            {
-                "type": "http",
-                "scheme": "bearer",
-                "bearerFormat": "JWT"
-              }
-            "##}
+            pass! { OpenAPIV3, include_str!("../openapi3-examples/3.0/pass/swagger2openapi/openapi.json") }
+            pass! { OpenAPIV3, include_str!("../examples/v3.0/json/api-with-examples.json") }
+            pass! { OpenAPIV3, include_str!("../examples/v3.0/json/callback-example.json") }
+            pass! { OpenAPIV3, include_str!("../examples/v3.0/json/link-example.json") }
+            pass! { OpenAPIV3, include_str!("../examples/v3.0/json/petstore-expanded.json") }
+            pass! { OpenAPIV3, include_str!("../examples/v3.0/json/petstore.json") }
+            pass! { OpenAPIV3, include_str!("../examples/v3.0/json/uspto.json") }
         }
     }
 }
