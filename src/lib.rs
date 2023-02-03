@@ -390,6 +390,16 @@ pub struct Tag {
     pub external_docs: Option<ExternalDocumentation>,
 }
 
+impl Tag {
+    fn new(name: impl Into<String>, description: impl Into<Option<String>>) -> Tag {
+        Self {
+            name: name.into(),
+            description: description.into(),
+            external_docs: None
+        }
+    }
+}
+
 /// A simple object to allow referencing other components in the specification, internally and externally.
 #[skip_serializing_none]
 #[derive(Debug, Clone, Serialize, Deserialize)]
