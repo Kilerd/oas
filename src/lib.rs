@@ -400,7 +400,7 @@ pub struct Tag {
 }
 
 impl Tag {
-    fn new(name: impl Into<String>, description: impl Into<Option<String>>) -> Tag {
+    pub fn new(name: impl Into<String>, description: impl Into<Option<String>>) -> Tag {
         Self {
             name: name.into(),
             description: description.into(),
