@@ -2,6 +2,15 @@ use serde::{Deserialize, Serialize};
 use serde_with::skip_serializing_none;
 use std::collections::BTreeMap;
 
+pub trait Convertible: Serialize {
+    fn to_string(&self) -> String {
+        serde_json::to_string(&self).unwrap()
+    }
+    fn to_value(&self) -> serde_json::Value {
+        serde_json::to_value(&self).unwrap()
+    }
+}
+
 #[skip_serializing_none]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(untagged)]
@@ -395,7 +404,7 @@ impl Tag {
         Self {
             name: name.into(),
             description: description.into(),
-            external_docs: None
+            external_docs: None,
         }
     }
 }
@@ -513,10 +522,25 @@ pub struct SecurityRequirement {
     pub data: BTreeMap<String, Vec<String>>,
 }
 
+
+macro_rules! impl_convertible {
+    ($($st:ty,)+) => {
+        $(
+        impl Convertible for $st {}
+        )+
+    };
+}
+impl_convertible!{
+    OpenAPIV3, Info, Contact, License, Server, ServerVariable, Components, PathItem,
+    Operation, ExternalDocumentation, ParameterIn, Parameter, RequestBody, MediaType,
+    Encoding, Responses, Response, Callback, Example, Link, Header, Tag, Reference,
+    Schema, Discriminator, SecurityType, SecurityScheme, OauthFlows, OauthFlow, SecurityRequirement,
+}
+
 #[cfg(test)]
 mod test {
     mod pass {
-        use crate:: OpenAPIV3;
+        use crate::OpenAPIV3;
         use assert_json_diff::assert_json_eq;
 
         macro_rules! pass {
