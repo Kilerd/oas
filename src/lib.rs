@@ -2,15 +2,6 @@ use serde::{Deserialize, Serialize};
 use serde_with::skip_serializing_none;
 use std::collections::BTreeMap;
 
-pub trait Convertible: Serialize {
-    fn to_string(&self) -> String {
-        serde_json::to_string(&self).unwrap()
-    }
-    fn to_value(&self) -> serde_json::Value {
-        serde_json::to_value(&self).unwrap()
-    }
-}
-
 #[skip_serializing_none]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(untagged)]
@@ -523,14 +514,22 @@ pub struct SecurityRequirement {
 }
 
 
-macro_rules! impl_convertible {
+macro_rules! impl_serde_json {
     ($($st:ty,)+) => {
         $(
-        impl Convertible for $st {}
+        impl $st {
+
+            pub fn to_string(&self) -> String {
+                serde_json::to_string(&self).unwrap()
+            }
+            pub fn to_value(&self) -> serde_json::Value {
+                serde_json::to_value(&self).unwrap()
+            }
+        }
         )+
     };
 }
-impl_convertible!{
+impl_serde_json!{
     OpenAPIV3, Info, Contact, License, Server, ServerVariable, Components, PathItem,
     Operation, ExternalDocumentation, ParameterIn, Parameter, RequestBody, MediaType,
     Encoding, Responses, Response, Callback, Example, Link, Header, Tag, Reference,
