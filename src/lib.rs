@@ -417,6 +417,7 @@ pub struct Schema {
     pub _type: Option<String>,
     pub format: Option<String>,
     pub nullable: Option<bool>,
+    pub description: Option<String>,
     #[serde(flatten)]
     pub extras: BTreeMap<String, Any>,
 }
@@ -513,7 +514,6 @@ pub struct SecurityRequirement {
     pub data: BTreeMap<String, Vec<String>>,
 }
 
-
 macro_rules! impl_serde_json {
     ($($st:ty,)+) => {
         $(
@@ -529,7 +529,7 @@ macro_rules! impl_serde_json {
         )+
     };
 }
-impl_serde_json!{
+impl_serde_json! {
     OpenAPIV3, Info, Contact, License, Server, ServerVariable, Components, PathItem,
     Operation, ExternalDocumentation, ParameterIn, Parameter, RequestBody, MediaType,
     Encoding, Responses, Response, Callback, Example, Link, Header, Tag, Reference,
