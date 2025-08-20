@@ -188,7 +188,7 @@ println!("Loaded API: {}", spec.info.title);
 
 - `builders::api(title, version)` - Create a new API specification
 - `builders::get(summary)` - GET operation with 200 response
-- `builders::post(summary)` - POST operation with 201/400 responses  
+- `builders::post(summary)` - POST operation with 201/400 responses
 - `builders::put(summary)` - PUT operation with 200/404 responses
 - `builders::delete(summary)` - DELETE operation with 204/404 responses
 
