@@ -8,19 +8,36 @@ This is a Rust crate called `oas` (version 0.2.0) that provides OpenAPI Specific
 
 ## Architecture
 
-The entire OpenAPI v3.0 specification is modeled in a single file `src/lib.rs` containing:
+The OpenAPI v3.0 specification is now organized into separate modules for better maintainability:
 
-- **Core Types**: `OpenAPIV3` (root document), `Info`, `Server`, `Components`, `PathItem`, `Operation`
-- **Schema System**: `Schema`, `Parameter`, `RequestBody`, `Response`, `MediaType` 
-- **Security**: `SecurityScheme`, `SecurityRequirement`, `OauthFlows`
-- **Reference System**: `Referenceable<T>` enum allowing either direct data or `$ref` references
-- **Utilities**: Each main type has `to_string()` and `to_value()` methods for JSON serialization
+### Module Structure
+- **`types.rs`** (587 lines) - Core OpenAPI types and data structures
+  - `OpenAPIV3`, `Info`, `Server`, `Components`, `PathItem`, `Operation`
+  - `Schema`, `Parameter`, `RequestBody`, `Response`, `MediaType`
+  - `Referenceable<T>` enum for inline data or `$ref` references
+  
+- **`security.rs`** (89 lines) - Security-related types  
+  - `SecurityScheme`, `SecurityType`, `OauthFlows`, `SecurityRequirement`
+  
+- **`extensions.rs`** (715 lines) - Convenience methods and constructors
+  - `new()` constructors and fluent `with_*()` methods for all types
+  - Helper methods for `Referenceable<T>` specializations
+  - JSON serialization utilities
+  
+- **`builder_impl.rs`** (231 lines) - Builder patterns
+  - `OperationBuilder` for complex operation construction
+  - `builders` module with quick constructors (`api()`, `get()`, `post()`, etc.)
+  
+- **`lib.rs`** (96 lines) - Main entry point
+  - Module declarations and re-exports
+  - Library-level documentation
 
-Key design patterns:
+### Key Design Patterns
 - Uses `#[skip_serializing_none]` from serde_with for optional fields
-- `BTreeMap<String, T>` for extensible mappings
+- `BTreeMap<String, T>` for extensible mappings  
 - `Referenceable<T>` wrapper allows JSON references (`{"$ref": "..."}`) or inline data
 - Flattened serde attributes for flexible JSON structure handling
+- Modular organization improves code navigation and maintainability
 
 ## Development Commands
 
