@@ -21,7 +21,7 @@ Add this to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-oas = "0.1"
+oas = "0.2"
 serde_json = "1.0"  # For JSON serialization
 ```
 

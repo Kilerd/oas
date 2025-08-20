@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Overview
 
-This is a Rust crate called `oas` that provides OpenAPI Specification v3.0 types and utilities. The crate defines comprehensive Rust structs and enums that correspond to the OpenAPI v3.0 specification, with full serialization/deserialization support via Serde.
+This is a Rust crate called `oas` (version 0.2.0) that provides OpenAPI Specification v3.0 types and utilities. The crate defines comprehensive Rust structs and enums that correspond to the OpenAPI v3.0 specification, with full serialization/deserialization support via Serde and extensive convenience methods for programmatic API construction.
 
 ## Architecture
 
