@@ -1,32 +1,140 @@
+//! # OpenAPI Specification (OAS) 3.0 Rust Implementation
+//!
+//! This crate provides a complete implementation of the OpenAPI Specification 3.0 in Rust,
+//! with comprehensive support for serialization/deserialization and convenient builder patterns
+//! for programmatic API specification creation.
+//!
+//! ## Features
+//!
+//! - **Complete OAS 3.0 Support**: All OpenAPI 3.0 specification features including schemas, 
+//!   operations, parameters, responses, security, callbacks, and links
+//! - **Serde Integration**: Full JSON/YAML serialization and deserialization support
+//! - **Builder Patterns**: Fluent APIs for easy specification construction
+//! - **Type Safety**: Leverages Rust's type system to prevent invalid specifications
+//! - **Reference System**: Support for both inline definitions and `$ref` references
+//!
+//! ## Quick Start
+//!
+//! ```rust
+//! use oas::{builders, Referenceable, PathItem, Tag, Server};
+//!
+//! let api = builders::api("My API", "1.0.0")
+//!     .with_description("A sample API")
+//!     .add_server(Server::new("https://api.example.com"))
+//!     .add_path("/users", PathItem::new()
+//!         .with_get(builders::get("List users")
+//!             .response("200", Referenceable::ok("User list"))
+//!             .build()));
+//!
+//! println!("{}", api.to_string());
+//! ```
+//!
+//! ## Core Types
+//!
+//! - [`OpenAPIV3`] - The root OpenAPI document
+//! - [`Referenceable<T>`] - Wrapper for inline data or references
+//! - [`builders`] - Module containing builder utilities
+//! - [`OperationBuilder`] - Builder for complex operations
+//!
+//! ## Reference vs Inline Data
+//!
+//! The [`Referenceable<T>`] type allows you to specify either inline data or references
+//! to reusable components:
+//!
+//! ```rust
+//! use oas::{Referenceable, Schema};
+//!
+//! // Inline schema
+//! let inline = Referenceable::data(Schema::string());
+//!
+//! // Reference to component
+//! let reference = Referenceable::schema_ref("User");
+//! ```
+
 use serde::{Deserialize, Serialize};
 use serde_with::skip_serializing_none;
 use std::collections::BTreeMap;
 
+/// A wrapper type that can contain either inline data or a reference to a component.
+///
+/// This is a core type in OpenAPI specifications that allows for reusable components.
+/// You can either define data inline or reference a component defined elsewhere.
+///
+/// # Examples
+///
+/// ```rust
+/// use oas::{Referenceable, Schema};
+///
+/// // Inline data
+/// let inline = Referenceable::data(Schema::string());
+///
+/// // Reference to a component
+/// let reference: Referenceable<Schema> = Referenceable::reference("#/components/schemas/User");
+///
+/// // Convenience method for component references
+/// let component_ref = Referenceable::schema_ref("User");
+/// ```
 #[skip_serializing_none]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum Referenceable<T> {
+    /// Inline data
     Data(T),
+    /// Reference to a component
     Reference(Reference),
 }
 
 impl<T> Referenceable<T> {
-    /// Create a new Referenceable with inline data
+    /// Create a new Referenceable with inline data.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use oas::{Referenceable, Schema};
+    ///
+    /// let inline_schema = Referenceable::data(Schema::string());
+    /// ```
     pub fn data(data: T) -> Self {
         Self::Data(data)
     }
 
-    /// Create a new Referenceable with a reference
+    /// Create a new Referenceable with a reference string.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use oas::{Referenceable, Schema};
+    ///
+    /// let ref_schema: Referenceable<Schema> = Referenceable::reference("#/components/schemas/User");
+    /// ```
     pub fn reference(reference: impl Into<String>) -> Self {
         Self::Reference(Reference::new(reference))
     }
 
-    /// Create a reference to a component
+    /// Create a reference to a component using OpenAPI component path format.
+    ///
+    /// This is a convenience method that constructs the proper `#/components/{type}/{name}` format.
+    ///
+    /// # Arguments
+    ///
+    /// * `component_type` - The type of component (e.g., "schemas", "responses", "parameters")
+    /// * `name` - The name of the component
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use oas::{Referenceable, Schema, Response};
+    ///
+    /// let schema_ref: Referenceable<Schema> = Referenceable::component_ref("schemas", "User");
+    /// let response_ref: Referenceable<Response> = Referenceable::component_ref("responses", "NotFound");
+    /// ```
     pub fn component_ref(component_type: &str, name: impl Into<String>) -> Self {
         Self::Reference(Reference::new(format!("#/components/{}/{}", component_type, name.into())))
     }
 
-    /// Get the data if this is a Data variant
+    /// Get the inline data if this is a Data variant.
+    ///
+    /// Returns `Some(&T)` if this contains inline data, `None` if it's a reference.
     pub fn as_data(&self) -> Option<&T> {
         match self {
             Self::Data(data) => Some(data),
@@ -34,7 +142,9 @@ impl<T> Referenceable<T> {
         }
     }
 
-    /// Get the reference if this is a Reference variant
+    /// Get the reference if this is a Reference variant.
+    ///
+    /// Returns `Some(&Reference)` if this contains a reference, `None` if it's inline data.
     pub fn as_reference(&self) -> Option<&Reference> {
         match self {
             Self::Data(_) => None,
@@ -42,38 +152,93 @@ impl<T> Referenceable<T> {
         }
     }
 
-    /// Check if this is a Data variant
+    /// Check if this contains inline data.
+    ///
+    /// Returns `true` if this is a `Data` variant, `false` if it's a `Reference`.
     pub fn is_data(&self) -> bool {
         matches!(self, Self::Data(_))
     }
 
-    /// Check if this is a Reference variant
+    /// Check if this contains a reference.
+    ///
+    /// Returns `true` if this is a `Reference` variant, `false` if it's `Data`.
     pub fn is_reference(&self) -> bool {
         matches!(self, Self::Reference(_))
     }
 }
 
+/// The root document object of an OpenAPI v3.0 specification.
+///
+/// This is the main entry point for an OpenAPI specification document. It contains
+/// metadata about the API, server information, available paths and operations,
+/// reusable components, security requirements, and additional documentation.
+///
+/// # Examples
+///
+/// ```rust
+/// use oas::{OpenAPIV3, Info, Server, PathItem, builders};
+///
+/// let spec = OpenAPIV3::new(Info::new("My API", "1.0.0"))
+///     .with_description("A sample API")
+///     .add_server(Server::new("https://api.example.com"))
+///     .add_path("/users", PathItem::new()
+///         .with_get(builders::get("List users").build()));
+/// ```
 #[skip_serializing_none]
-/// the root document object of openAPI v3.0
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct OpenAPIV3 {
-    /// This string MUST be the semantic version number of the OpenAPI Specification version that the OpenAPI document uses. The `openapi` field SHOULD be used by tooling specifications and clients to interpret the OpenAPI document. This is not related to the API info.version string.
+    /// The semantic version number of the OpenAPI Specification version.
+    ///
+    /// This MUST be the semantic version number of the OpenAPI Specification version
+    /// that the OpenAPI document uses. This is not related to the API `info.version` string.
+    /// Defaults to "3.0.0" when using `OpenAPIV3::new()`.
     pub openapi: String,
-    /// Provides metadata about the API
+
+    /// Provides metadata about the API.
+    ///
+    /// The metadata MAY be used by the clients if needed, and MAY be presented
+    /// in editing or documentation generation tools for convenience.
     pub info: Info,
-    /// An array of Server Objects, which provide connectivity information to a target server. If the `servers` property is not provided, or is an empty array, the default value would be a `Server` Object with a url value of `/`.
+
+    /// An array of Server Objects providing connectivity information to target servers.
+    ///
+    /// If the `servers` property is not provided, or is an empty array, the default
+    /// value would be a Server Object with a `url` value of `/`.
     pub servers: Option<Vec<Server>>,
+
     /// The available paths and operations for the API.
+    ///
+    /// This is a map where keys are path templates (like `/users/{id}`) and values
+    /// are PathItem objects describing the operations available on those paths.
     pub paths: BTreeMap<String, PathItem>,
+
     /// An element to hold various schemas for the specification.
+    ///
+    /// All objects defined within the components object will have no effect on the API
+    /// unless they are explicitly referenced from properties outside the components object.
     pub components: Option<Components>,
-    /// A declaration of which security mechanisms can be used across the API. The list of values includes alternative security requirement objects that can be used. Only one of the security requirement objects need to be satisfied to authorize a request. Individual operations can override this definition. To make security optional, an empty security requirement (`{}`) can be included in the array.
+
+    /// A declaration of which security mechanisms can be used across the API.
+    ///
+    /// The list of values includes alternative security requirement objects that can be used.
+    /// Only one of the security requirement objects need to be satisfied to authorize a request.
+    /// Individual operations can override this definition.
     pub security: Option<Vec<SecurityRequirement>>,
-    /// A list of tags used by the specification with additional metadata. The order of the tags can be used to reflect on their order by the parsing tools. Not all tags that are used by the Operation Object must be declared. The tags that are not declared MAY be organized randomly or based on the tools' logic. Each tag name in the list MUST be unique.
+
+    /// A list of tags used by the specification with additional metadata.
+    ///
+    /// The order of the tags can be used to reflect on their order by the parsing tools.
+    /// Not all tags that are used by the Operation Object must be declared. Each tag name
+    /// in the list MUST be unique.
     pub tags: Option<Vec<Tag>>,
-    /// Additional external documentation.
+
+    /// Additional external documentation for the API.
     pub external_docs: Option<ExternalDocumentation>,
+
+    /// Extension fields that start with `x-`.
+    ///
+    /// This allows for custom extensions to the OpenAPI specification.
     #[serde(flatten)]
     pub extras: Option<BTreeMap<String, Any>>,
 }
@@ -1204,28 +1369,97 @@ impl Default for OperationBuilder {
     }
 }
 
-// Quick builder functions
+/// Builder utilities for quickly constructing OpenAPI specifications.
+///
+/// This module provides convenient functions for creating common OpenAPI constructs
+/// with sensible defaults. It's designed to reduce boilerplate when building
+/// API specifications programmatically.
+///
+/// # Examples
+///
+/// ```rust
+/// use oas::{builders, PathItem};
+///
+/// let api = builders::api("My API", "1.0.0")
+///     .add_path("/users", PathItem::new()
+///         .with_get(builders::get("List users").build())
+///         .with_post(builders::post("Create user").build()));
+/// ```
 pub mod builders {
     use super::*;
 
-    /// Quick API builder for simple cases
+    /// Create a new OpenAPI specification with basic info.
+    ///
+    /// This creates an OpenAPIV3 document with the specified title and version,
+    /// using OpenAPI version "3.0.0" and empty paths.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use oas::builders;
+    ///
+    /// let api = builders::api("My API", "1.0.0");
+    /// ```
     pub fn api(title: impl Into<String>, version: impl Into<String>) -> OpenAPIV3 {
         OpenAPIV3::new(Info::new(title, version))
     }
 
-    /// Quick operation builder
+    /// Create a new operation builder.
+    ///
+    /// This returns an `OperationBuilder` for constructing operations with
+    /// a fluent interface.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use oas::{builders, Referenceable};
+    ///
+    /// let operation = builders::operation()
+    ///     .summary("Get user")
+    ///     .response("200", Referenceable::ok("User retrieved"))
+    ///     .build();
+    /// ```
     pub fn operation() -> OperationBuilder {
         OperationBuilder::new()
     }
 
-    /// Quick GET operation
+    /// Create a GET operation builder with common defaults.
+    ///
+    /// Creates an operation builder pre-configured with:
+    /// - The provided summary
+    /// - A 200 "Success" response
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use oas::builders;
+    ///
+    /// let get_users = builders::get("List users")
+    ///     .tag("users")
+    ///     .build();
+    /// ```
     pub fn get(summary: impl Into<String>) -> OperationBuilder {
         OperationBuilder::new()
             .summary(summary)
             .response("200", Referenceable::ok("Success"))
     }
 
-    /// Quick POST operation  
+    /// Create a POST operation builder with common defaults.
+    ///
+    /// Creates an operation builder pre-configured with:
+    /// - The provided summary
+    /// - A 201 "Created" response
+    /// - A 400 "Bad Request" response
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use oas::builders;
+    ///
+    /// let create_user = builders::post("Create user")
+    ///     .tag("users")
+    ///     .build();
+    /// ```
     pub fn post(summary: impl Into<String>) -> OperationBuilder {
         OperationBuilder::new()
             .summary(summary)
@@ -1233,7 +1467,22 @@ pub mod builders {
             .response("400", Referenceable::error("Bad Request"))
     }
 
-    /// Quick PUT operation
+    /// Create a PUT operation builder with common defaults.
+    ///
+    /// Creates an operation builder pre-configured with:
+    /// - The provided summary
+    /// - A 200 "Updated" response
+    /// - A 404 "Not Found" response
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use oas::builders;
+    ///
+    /// let update_user = builders::put("Update user")
+    ///     .tag("users")
+    ///     .build();
+    /// ```
     pub fn put(summary: impl Into<String>) -> OperationBuilder {
         OperationBuilder::new()
             .summary(summary)
@@ -1241,7 +1490,22 @@ pub mod builders {
             .response("404", Referenceable::error("Not Found"))
     }
 
-    /// Quick DELETE operation
+    /// Create a DELETE operation builder with common defaults.
+    ///
+    /// Creates an operation builder pre-configured with:
+    /// - The provided summary
+    /// - A 204 "Deleted" response
+    /// - A 404 "Not Found" response
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use oas::builders;
+    ///
+    /// let delete_user = builders::delete("Delete user")
+    ///     .tag("users")
+    ///     .build();
+    /// ```
     pub fn delete(summary: impl Into<String>) -> OperationBuilder {
         OperationBuilder::new()
             .summary(summary)
