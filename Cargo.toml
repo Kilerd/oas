@@ -1,7 +1,7 @@
 [package]
 name = "oas"
-description = "OpenAPi Specification"
-version = "0.2.1"
+description = "OpenAPI models with JSON Schema 2020-12 and streaming media type support"
+version = "0.3.0"
 edition = "2021"
 license = "MIT"
 

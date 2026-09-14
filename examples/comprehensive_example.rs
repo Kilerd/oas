@@ -49,11 +49,11 @@ fn create_comprehensive_api() -> oas::OpenAPIV3 {
     user_properties.insert("required".to_string(), serde_json::json!(["id", "username", "email"]));
     
     let user_schema = Schema {
-        _type: Some("object".to_string()),
+        _type: Some("object".into()),
         description: Some("A user in the system".to_string()),
         extras: user_properties,
         format: None,
-        nullable: None,
+        ..Schema::default()
     };
     
     schemas.insert("User".to_string(), Referenceable::data(user_schema));
@@ -73,11 +73,11 @@ fn create_comprehensive_api() -> oas::OpenAPIV3 {
     error_properties.insert("required".to_string(), serde_json::json!(["code", "message"]));
     
     let error_schema = Schema {
-        _type: Some("object".to_string()),
+        _type: Some("object".into()),
         description: Some("Error response".to_string()),
         extras: error_properties,
         format: None,
-        nullable: None,
+        ..Schema::default()
     };
     
     schemas.insert("Error".to_string(), Referenceable::data(error_schema));

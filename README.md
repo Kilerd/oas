@@ -1,17 +1,24 @@
-# OpenAPI Specification (OAS) 3.0 for Rust
+# OpenAPI Specification (OAS) for Rust
 
 [![Crates.io](https://img.shields.io/crates/v/oas.svg)](https://crates.io/crates/oas)
 [![Documentation](https://docs.rs/oas/badge.svg)](https://docs.rs/oas)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-A comprehensive Rust implementation of the OpenAPI Specification 3.0 with full serialization/deserialization support and convenient builder patterns for programmatic API specification creation.
+Rust OpenAPI models with Serde serialization and convenient builders. The 0.3 API
+adds JSON Schema 2020-12 representations and OpenAPI 3.2 streaming media types while
+keeping existing constructors on OpenAPI 3.0.0 by default.
+
+**OpenAPI 3.1/3.2 coverage is partial.** See [MIGRATION.md](MIGRATION.md) for source
+compatibility changes, schema migration, and the remaining model differences.
 
 ## Features
 
-- ✅ **Complete OAS 3.0 Support** - All OpenAPI 3.0 specification features
+- **OpenAPI Models** - Operations, parameters, responses, security, callbacks, and links
+- **Modern Schemas** - Type unions, boolean schemas, reference siblings, and string-encoded content
+- **Streaming Media Types** - OpenAPI 3.2 `itemSchema` for parsed stream items, including SSE
 - 🔄 **Serde Integration** - Full JSON/YAML serialization and deserialization
 - 🛠️ **Builder Patterns** - Fluent APIs for easy specification construction
-- 🔒 **Type Safety** - Leverages Rust's type system to prevent invalid specifications
+- **Typed Construction** - Rust models and builders; document/schema validation is left to callers
 - 📚 **Reference System** - Support for both inline definitions and `$ref` references
 - 🚀 **Convenience Methods** - Extensive helper functions to reduce boilerplate
 
@@ -21,7 +28,7 @@ Add this to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-oas = "0.2"
+oas = "0.3"
 serde_json = "1.0"  # For JSON serialization
 ```
 
@@ -52,6 +59,27 @@ fn main() {
 ```
 
 ## Core Concepts
+
+### OpenAPI 3.2 and SSE
+
+Choose `OpenAPIV3::new_v3_2(info)` explicitly and use `itemSchema` for individual
+parsed events. JSON in an SSE `data` field remains a string on the wire:
+
+```rust
+use oas::{Info, MediaType, OpenAPIV3, Schema};
+
+let api = OpenAPIV3::new_v3_2(Info::new("Event API", "1.0.0"));
+let events = MediaType::new()
+    .with_item_schema(Schema::reference("#/components/schemas/Event"));
+let data = Schema::string()
+    .with_content_media_type("application/json")
+    .with_content_schema(Schema::reference("#/components/schemas/Payload"));
+let nullable_string = Schema::string().with_types(["string", "null"]);
+```
+
+See [examples/sse.rs](examples/sse.rs) for a complete document (`cargo run --example sse`).
+`SchemaValue` represents either a `Schema` object or a boolean schema; schema
+positions accept both. Unknown JSON Schema keywords are retained in `Schema.extras`.
 
 ### Referenceable Types
 
@@ -209,10 +237,13 @@ println!("Loaded API: {}", spec.info.title);
 
 ## Testing
 
-The crate includes comprehensive tests using real OpenAPI specification files:
+Tests cover existing 3.0 documents, 3.2 SSE round trips, modern schema forms, and
+constructor compatibility. Initialize the fixture submodule on a fresh checkout:
 
 ```bash
-cargo test
+git submodule update --init
+cargo test --all-targets
+cargo test --doc
 ```
 
 ## Contributing

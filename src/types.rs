@@ -1,7 +1,8 @@
-//! Core OpenAPI 3.0 type definitions.
+//! OpenAPI types with JSON Schema 2020-12 and OpenAPI 3.2 streaming support.
 //!
-//! This module contains all the main data structures that represent the OpenAPI 3.0 specification,
-//! including the root document, schemas, operations, parameters, responses, and related types.
+//! The core document and operation models retain their 3.0 defaults. Schema positions
+//! additionally support modern schemas and streaming items; see MIGRATION.md for
+//! the remaining 3.1/3.2 model differences.
 
 use serde::{Deserialize, Serialize};
 use serde_with::skip_serializing_none;
@@ -84,7 +85,11 @@ impl<T> Referenceable<T> {
     /// let response_ref: Referenceable<Response> = Referenceable::component_ref("responses", "NotFound");
     /// ```
     pub fn component_ref(component_type: &str, name: impl Into<String>) -> Self {
-        Self::Reference(Reference::new(format!("#/components/{}/{}", component_type, name.into())))
+        Self::Reference(Reference::new(format!(
+            "#/components/{}/{}",
+            component_type,
+            name.into()
+        )))
     }
 
     /// Get the inline data if this is a Data variant.
@@ -122,7 +127,7 @@ impl<T> Referenceable<T> {
     }
 }
 
-/// The root document object of an OpenAPI v3.0 specification.
+/// The root OpenAPI v3 document, defaulting to 3.0.0 for existing constructors.
 ///
 /// This is the main entry point for an OpenAPI specification document. It contains
 /// metadata about the API, server information, available paths and operations,
@@ -270,7 +275,7 @@ pub struct ServerVariable {
 #[serde(rename_all = "camelCase")]
 pub struct Components {
     /// An object to hold reusable Schema Objects.
-    pub schemas: Option<BTreeMap<String, Referenceable<Schema>>>,
+    pub schemas: Option<BTreeMap<String, SchemaValue>>,
     /// An object to hold reusable Response Objects.
     pub responses: Option<BTreeMap<String, Referenceable<Response>>>,
     /// An object to hold reusable Parameter Objects.
@@ -397,7 +402,7 @@ pub struct Parameter {
     pub explode: Option<bool>,
     pub allow_reserved: Option<bool>,
     /// The schema defining the type used for the parameter.
-    pub schema: Option<Referenceable<Schema>>,
+    pub schema: Option<SchemaValue>,
     /// Example of the parameter's potential value.
     pub example: Option<Any>,
     /// Examples of the parameter's potential value.
@@ -423,7 +428,11 @@ pub struct RequestBody {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MediaType {
     /// The schema defining the content of the request, response, or parameter.
-    pub schema: Option<Referenceable<Schema>>,
+    pub schema: Option<SchemaValue>,
+    /// OpenAPI 3.2 schema for each parsed item in a sequential media type.
+    /// Unlike `schema`, this does not describe the complete body.
+    #[serde(rename = "itemSchema")]
+    pub item_schema: Option<SchemaValue>,
     /// Example of the media type.
     pub example: Option<Any>,
     /// Examples of the media type.
@@ -524,7 +533,7 @@ pub struct Header {
     pub style: Option<String>,
     pub explode: Option<bool>,
     pub allow_reserved: Option<bool>,
-    pub schema: Option<Referenceable<Schema>>,
+    pub schema: Option<SchemaValue>,
     pub example: Option<Any>,
     pub examples: Option<BTreeMap<String, Referenceable<Example>>>,
     pub content: Option<BTreeMap<String, MediaType>>,
@@ -560,15 +569,129 @@ impl Reference {
     }
 }
 
-/// The Schema Object allows the definition of input and output data types.
+/// A JSON Schema `type` keyword: a single type or a union of types.
+///
+/// Use `SchemaType::Multiple(vec!["string".into(), "null".into()])` for
+/// a nullable string in OpenAPI 3.1/3.2. Values are represented, not validated.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum SchemaType {
+    Single(String),
+    Multiple(Vec<String>),
+}
+
+impl From<String> for SchemaType {
+    fn from(value: String) -> Self {
+        Self::Single(value)
+    }
+}
+
+impl From<&str> for SchemaType {
+    fn from(value: &str) -> Self {
+        Self::Single(value.into())
+    }
+}
+
+impl From<Vec<String>> for SchemaType {
+    fn from(value: Vec<String>) -> Self {
+        Self::Multiple(value)
+    }
+}
+
+/// A schema in any OpenAPI schema position, including boolean schemas.
+///
+/// JSON Schema references are ordinary schema objects: `$ref` and its sibling
+/// keywords are preserved together. They do not use OpenAPI Reference Object
+/// semantics. Boolean schemas are valid in OpenAPI 3.1/3.2, but not 3.0.
+///
+/// ```
+/// use oas::{MediaType, Schema, SchemaValue};
+/// let unrestricted = MediaType::new().with_schema(true);
+/// let forbidden = SchemaValue::from(false);
+/// let referenced = Schema::reference("#/components/schemas/Event")
+///     .with_description("A parsed event");
+/// ```
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum SchemaValue {
+    Boolean(bool),
+    Object(Box<Schema>),
+}
+
+impl SchemaValue {
+    pub fn as_object(&self) -> Option<&Schema> {
+        match self {
+            Self::Object(schema) => Some(schema),
+            Self::Boolean(_) => None,
+        }
+    }
+
+    pub fn as_object_mut(&mut self) -> Option<&mut Schema> {
+        match self {
+            Self::Object(schema) => Some(schema),
+            Self::Boolean(_) => None,
+        }
+    }
+}
+
+impl Default for SchemaValue {
+    fn default() -> Self {
+        Schema::new().into()
+    }
+}
+
+impl From<Schema> for SchemaValue {
+    fn from(schema: Schema) -> Self {
+        Self::Object(Box::new(schema))
+    }
+}
+
+impl From<bool> for SchemaValue {
+    fn from(value: bool) -> Self {
+        Self::Boolean(value)
+    }
+}
+
+impl From<Reference> for SchemaValue {
+    fn from(reference: Reference) -> Self {
+        Schema::reference(reference._ref).into()
+    }
+}
+
+/// Keeps existing schema helper constructors usable with schema-bearing builders.
+impl From<Referenceable<Schema>> for SchemaValue {
+    fn from(schema: Referenceable<Schema>) -> Self {
+        match schema {
+            Referenceable::Data(schema) => schema.into(),
+            Referenceable::Reference(reference) => reference.into(),
+        }
+    }
+}
+
+/// A schema object defining input and output data types.
+///
+/// Use [`SchemaValue`] where a schema may also be a boolean. Keywords without
+/// dedicated fields (including nested schemas) are preserved verbatim in `extras`.
+/// This is a representation, not a JSON Schema validator or reference resolver.
 #[skip_serializing_none]
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct Schema {
     #[serde(rename = "type")]
-    pub _type: Option<String>,
+    pub _type: Option<SchemaType>,
+    #[serde(rename = "$ref")]
+    pub _ref: Option<String>,
     pub format: Option<String>,
+    /// Legacy OpenAPI 3.0 keyword, retained without automatic conversion.
+    /// For 3.1/3.2, use a type union containing `null` instead.
     pub nullable: Option<bool>,
     pub description: Option<String>,
+    /// Media type of content encoded inside a string, e.g. `application/json`.
+    pub content_media_type: Option<String>,
+    /// Encoding of the string content, e.g. `base64`.
+    pub content_encoding: Option<String>,
+    /// Schema describing decoded string content. Does not change the wire type.
+    pub content_schema: Option<Box<SchemaValue>>,
     #[serde(flatten)]
     pub extras: BTreeMap<String, Any>,
 }

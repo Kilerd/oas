@@ -9,6 +9,24 @@ use crate::types::*;
 
 // Convenience constructors for main types
 impl OpenAPIV3 {
+    /// Creates an OpenAPI 3.1 document. Schema migration is explicit; see MIGRATION.md.
+    pub fn new_v3_1(info: Info) -> Self {
+        Self {
+            openapi: "3.1.0".into(),
+            ..Self::new(info)
+        }
+    }
+
+    /// Creates an OpenAPI 3.2 document with streaming schema support.
+    /// This does not imply full coverage of all 3.2 model fields; see MIGRATION.md.
+    pub fn new_v3_2(info: Info) -> Self {
+        Self {
+            openapi: "3.2.0".into(),
+            ..Self::new(info)
+        }
+    }
+
+    /// Creates an OpenAPI 3.0.0 document for compatibility with existing callers.
     pub fn new(info: Info) -> Self {
         Self {
             openapi: "3.0.0".to_string(),
@@ -286,8 +304,8 @@ impl Parameter {
         self
     }
 
-    pub fn with_schema(mut self, schema: Referenceable<Schema>) -> Self {
-        self.schema = Some(schema);
+    pub fn with_schema(mut self, schema: impl Into<SchemaValue>) -> Self {
+        self.schema = Some(schema.into());
         self
     }
 }
@@ -341,7 +359,11 @@ impl Responses {
         }
     }
 
-    pub fn with_status(mut self, status: impl Into<String>, response: Referenceable<Response>) -> Self {
+    pub fn with_status(
+        mut self,
+        status: impl Into<String>,
+        response: Referenceable<Response>,
+    ) -> Self {
         self.data.insert(status.into(), response);
         self
     }
@@ -362,14 +384,21 @@ impl MediaType {
     pub fn new() -> Self {
         Self {
             schema: None,
+            item_schema: None,
             example: None,
             examples: None,
             encoding: None,
         }
     }
 
-    pub fn with_schema(mut self, schema: Referenceable<Schema>) -> Self {
-        self.schema = Some(schema);
+    pub fn with_schema(mut self, schema: impl Into<SchemaValue>) -> Self {
+        self.schema = Some(schema.into());
+        self
+    }
+
+    /// Describes each parsed stream item (OpenAPI 3.2), independently of the body schema.
+    pub fn with_item_schema(mut self, schema: impl Into<SchemaValue>) -> Self {
+        self.item_schema = Some(schema.into());
         self
     }
 
@@ -389,15 +418,50 @@ impl Schema {
     pub fn new() -> Self {
         Self {
             _type: None,
+            _ref: None,
             format: None,
             nullable: None,
             description: None,
+            content_media_type: None,
+            content_encoding: None,
+            content_schema: None,
             extras: BTreeMap::new(),
         }
     }
 
     pub fn with_type(mut self, schema_type: impl Into<String>) -> Self {
-        self._type = Some(schema_type.into());
+        self._type = Some(SchemaType::Single(schema_type.into()));
+        self
+    }
+
+    /// A JSON Schema type union, such as `["string", "null"]` (OpenAPI 3.1/3.2).
+    pub fn with_types(mut self, types: impl IntoIterator<Item = impl Into<String>>) -> Self {
+        self._type = Some(SchemaType::Multiple(
+            types.into_iter().map(Into::into).collect(),
+        ));
+        self
+    }
+
+    /// A JSON Schema reference. Sibling keywords retain their normal semantics.
+    pub fn reference(reference: impl Into<String>) -> Self {
+        Self {
+            _ref: Some(reference.into()),
+            ..Self::new()
+        }
+    }
+
+    pub fn with_content_media_type(mut self, media_type: impl Into<String>) -> Self {
+        self.content_media_type = Some(media_type.into());
+        self
+    }
+
+    pub fn with_content_encoding(mut self, encoding: impl Into<String>) -> Self {
+        self.content_encoding = Some(encoding.into());
+        self
+    }
+
+    pub fn with_content_schema(mut self, schema: impl Into<SchemaValue>) -> Self {
+        self.content_schema = Some(Box::new(schema.into()));
         self
     }
 
@@ -425,6 +489,11 @@ impl Schema {
 
     pub fn boolean() -> Self {
         Self::new().with_type("boolean")
+    }
+
+    /// A schema accepting only null (OpenAPI 3.1/3.2).
+    pub fn null() -> Self {
+        Self::new().with_type("null")
     }
 
     pub fn array() -> Self {
@@ -457,8 +526,13 @@ impl Components {
         }
     }
 
-    pub fn with_schemas(mut self, schemas: BTreeMap<String, Referenceable<Schema>>) -> Self {
-        self.schemas = Some(schemas);
+    pub fn with_schemas<S: Into<SchemaValue>>(mut self, schemas: BTreeMap<String, S>) -> Self {
+        self.schemas = Some(
+            schemas
+                .into_iter()
+                .map(|(name, schema)| (name, schema.into()))
+                .collect(),
+        );
         self
     }
 
@@ -467,7 +541,10 @@ impl Components {
         self
     }
 
-    pub fn with_parameters(mut self, parameters: BTreeMap<String, Referenceable<Parameter>>) -> Self {
+    pub fn with_parameters(
+        mut self,
+        parameters: BTreeMap<String, Referenceable<Parameter>>,
+    ) -> Self {
         self.parameters = Some(parameters);
         self
     }
@@ -598,7 +675,7 @@ impl Referenceable<Parameter> {
     }
 
     /// Add schema to parameter if it contains data
-    pub fn with_schema(self, schema: Referenceable<Schema>) -> Self {
+    pub fn with_schema(self, schema: impl Into<SchemaValue>) -> Self {
         match self {
             Self::Data(param) => Self::data(param.with_schema(schema)),
             Self::Reference(r) => Self::Reference(r),
@@ -629,7 +706,7 @@ impl Referenceable<RequestBody> {
     }
 
     /// Create a JSON request body
-    pub fn json_body(schema: Referenceable<Schema>) -> Self {
+    pub fn json_body(schema: impl Into<SchemaValue>) -> Self {
         let mut content = BTreeMap::new();
         content.insert(
             "application/json".to_string(),
@@ -642,10 +719,7 @@ impl Referenceable<RequestBody> {
 // Additional convenience methods for PathItem
 impl PathItem {
     /// Add multiple HTTP methods at once
-    pub fn with_operations(
-        mut self,
-        operations: Vec<(&str, Operation)>,
-    ) -> Self {
+    pub fn with_operations(mut self, operations: Vec<(&str, Operation)>) -> Self {
         for (method, operation) in operations {
             match method.to_lowercase().as_str() {
                 "get" => self.get = Some(operation),
