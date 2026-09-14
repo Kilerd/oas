@@ -1,16 +1,21 @@
-//! # OpenAPI Specification (OAS) 3.0 Rust Implementation
+//! # OpenAPI models for Rust
 //!
-//! This crate provides a complete implementation of the OpenAPI Specification 3.0 in Rust,
-//! with comprehensive support for serialization/deserialization and convenient builder patterns
-//! for programmatic API specification creation.
+//! OpenAPI models with Serde support and builders. Existing document constructors
+//! default to OpenAPI 3.0.0; [`OpenAPIV3::new_v3_2`] opts into 3.2 streaming schemas.
+//! [`SchemaValue`] supports object and boolean schemas, with type unions and
+//! string-encoded content in [`Schema`]. Coverage of OpenAPI 3.1/3.2 is partial;
+//! see the [migration guide](https://github.com/Kilerd/oas/blob/main/MIGRATION.md)
+//! for source changes and remaining model differences. The crate does not validate
+//! documents or evaluate schemas.
 //!
 //! ## Features
 //!
-//! - **Complete OAS 3.0 Support**: All OpenAPI 3.0 specification features including schemas,
+//! - **OpenAPI Models**: Schemas,
 //!   operations, parameters, responses, security, callbacks, and links
 //! - **Serde Integration**: Full JSON/YAML serialization and deserialization support
 //! - **Builder Patterns**: Fluent APIs for easy specification construction
-//! - **Type Safety**: Leverages Rust's type system to prevent invalid specifications
+//! - **Modern Schemas**: Type unions, boolean schemas, and references with sibling keywords
+//! - **Streaming Media Types**: OpenAPI 3.2 `itemSchema` for parsed stream items
 //! - **Reference System**: Support for both inline definitions and `$ref` references
 //!
 //! ## Quick Start
@@ -33,6 +38,7 @@
 //!
 //! - [`OpenAPIV3`] - The root OpenAPI document
 //! - [`Referenceable<T>`] - Wrapper for inline data or references
+//! - [`SchemaValue`] - Object or boolean schema; schema references retain sibling keywords
 //! - [`builders`] - Module containing builder utilities
 //! - [`OperationBuilder`] - Builder for complex operations
 //!

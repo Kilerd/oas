@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased] - 0.3.0
+
+### Added
+- OpenAPI 3.2 `MediaType.item_schema` and its builder, independent of the whole-body schema.
+- `SchemaValue` for object/boolean schemas and `SchemaType` for single types/type unions.
+- Schema references with sibling keywords and typed `contentMediaType`, `contentEncoding`, and `contentSchema`.
+- Explicit OpenAPI 3.1/3.2 document constructors, an SSE example, round-trip/compatibility tests, and CI.
+- [Migration policy and remaining 3.1/3.2 model differences](MIGRATION.md); coverage remains partial.
+
+### Changed
+- Schema-bearing fields now use `SchemaValue`; schema builders continue accepting legacy `Referenceable<Schema>` helpers.
+- `Schema._type` uses `Option<SchemaType>`; schema and media-type literals need the new fields or defaults.
+- The package version advances to 0.3.0 for these source-breaking changes. Existing document constructors still emit 3.0.0, and legacy nullable/exclusive-bound values are not rewritten.
+
 ## [0.2.0] - 2025-08-20
 
 ### Added

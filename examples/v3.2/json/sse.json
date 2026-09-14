@@ -1,0 +1,68 @@
+{
+  "openapi": "3.2.0",
+  "jsonSchemaDialect": "https://spec.openapis.org/oas/3.1/dialect/base",
+  "info": { "title": "Job events", "version": "1.0.0" },
+  "paths": {
+    "/events": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "Parsed job events",
+            "content": {
+              "text/event-stream": {
+                "schema": {
+                  "type": "array",
+                  "items": { "$ref": "#/components/schemas/Event" }
+                },
+                "itemSchema": {
+                  "$ref": "#/components/schemas/Event",
+                  "description": "Each event is processed independently",
+                  "properties": { "event": { "const": "job.updated" } }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Event": {
+        "type": "object",
+        "required": ["data"],
+        "properties": {
+          "event": { "type": "string" },
+          "id": { "type": "string" },
+          "retry": { "type": "integer", "minimum": 0 },
+          "data": {
+            "type": "string",
+            "contentMediaType": "application/json",
+            "contentSchema": {
+              "$ref": "#/components/schemas/Job",
+              "description": "JSON decoded from the data string"
+            }
+          }
+        },
+        "additionalProperties": false
+      },
+      "Job": {
+        "$id": "https://example.com/schemas/job",
+        "$defs": { "Status": { "enum": ["queued", "done"] } },
+        "type": "object",
+        "properties": {
+          "status": { "$ref": "#/$defs/Status" },
+          "message": { "type": ["string", "null"], "default": null },
+          "metadata": true,
+          "password": false
+        },
+        "unevaluatedProperties": false
+      },
+      "Anything": true,
+      "Nothing": false,
+      "NullableJob": {
+        "anyOf": [{ "$ref": "#/components/schemas/Job" }, { "type": "null" }]
+      }
+    }
+  }
+}

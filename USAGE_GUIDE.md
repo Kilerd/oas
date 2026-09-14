@@ -1,5 +1,8 @@
 # OAS Usage Guide
 
+For OpenAPI 3.2 streaming schemas and migration from the 0.2 API, see
+[MIGRATION.md](MIGRATION.md) and [examples/sse.rs](examples/sse.rs).
+
 This guide provides detailed examples and patterns for using the OAS crate effectively.
 
 ## Table of Contents
@@ -191,11 +194,11 @@ user_properties.insert("properties".to_string(), serde_json::json!({
 user_properties.insert("required".to_string(), serde_json::json!(["id", "name", "email"]));
 
 schemas.insert("User".to_string(), Referenceable::data(Schema {
-    _type: Some("object".to_string()),
+    _type: Some("object".into()),
     description: Some("A user object".to_string()),
     extras: user_properties,
     format: None,
-    nullable: None,
+    ..Schema::default()
 }));
 
 // Error schema
