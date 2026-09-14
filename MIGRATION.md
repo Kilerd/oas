@@ -21,8 +21,8 @@ coverage. The remaining differences are listed below.
   and migrate the keywords together.
 - This is a **source-breaking 0.3 release** for direct field access, struct
   literals, and explicitly typed schema collections. Applications requiring the
-  unchanged 0.2 API should remain on `oas = "0.2"`. No crate release is implied by
-  updating the package version in this repository.
+  unchanged 0.2 API should remain on `oas = "0.2"`.
+  [Version 0.3.0](https://crates.io/crates/oas/0.3.0) was published on 2026-09-14.
 
 ## Rust API migration
 
