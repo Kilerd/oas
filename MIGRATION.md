@@ -96,11 +96,55 @@ in this crate. See the [OpenAPI SSE rules](https://spec.openapis.org/oas/v3.2.0.
 Run `cargo run --example sse` for a constructed document. The round-trip fixture is
 [examples/v3.2/json/sse.json](examples/v3.2/json/sse.json).
 
+## Document editing and extensions
+
+`Operation.extras` and `Response.extras` retain unmodeled fields, including `x-*`
+extensions, in `BTreeMap<String, serde_json::Value>`. This includes unknown fields
+without the `x-` prefix; retention does not make them valid OpenAPI fields.
+Values retain their JSON structure, including arrays, objects, and null. Typed
+edits such as changing `Operation.summary` or removing `PathItem.post` do not
+restore old values or deleted operations. The existing root and Schema `extras`
+behavior is unchanged.
+
+Both new maps start empty in `Operation::new`, `Response::new`, and the operation
+builders. Empty maps emit no additional JSON fields. Constructor and builder
+calls need no changes. Complete `Operation { ... }` and `Response { ... }` literals
+must add `extras: BTreeMap::new()` (or a populated map), which is a source-breaking
+change for callers using those literals. Struct update syntax can instead reuse
+the existing constructors:
+
+```rust
+use oas::{Operation, Response, Responses};
+
+let operation = Operation {
+    summary: Some("List items".into()),
+    ..Operation::new(Responses::new())
+};
+let response = Response {
+    description: "Success".into(),
+    ..Response::new("Success")
+};
+```
+
+Use the typed member for a modeled field; do not insert keys such as `summary`,
+`responses`, or `description` into that object's `extras`, as duplicate JSON keys
+can result. Extensions belong to the object that owns them, not to a root-level
+copy of `paths`.
+
+This retention is specific to Operation and inline Response objects, in addition
+to the existing root and Schema support. Other object types, such as Info,
+PathItem, Parameter, RequestBody, and MediaType, still discard their unmodeled
+fields. Extensions on the Responses container or Callback container are not
+supported. `Referenceable<T>` variant selection and the `Reference` model are
+unchanged; this change provides no general guarantee for non-schema Reference
+Objects. For lossless edits across unsupported objects, keep the original
+`serde_json::Value` and write back only the fields being changed.
+
 ## Remaining model differences
 
-This inventory compares the existing model to OpenAPI 3.1/3.2. Unknown fields on
-most non-schema objects are currently discarded; successful parsing alone does
-not guarantee a lossless round trip outside the supported subset.
+This inventory compares the existing model to OpenAPI 3.1/3.2. Field preservation
+is limited as described above; successful parsing alone does not guarantee a
+lossless round trip outside the supported subset.
 
 | Area | Remaining work |
 | --- | --- |

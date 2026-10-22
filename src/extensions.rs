@@ -241,6 +241,7 @@ impl Operation {
             deprecated: None,
             security: None,
             servers: None,
+            extras: BTreeMap::new(),
         }
     }
 
@@ -337,6 +338,7 @@ impl Response {
             headers: None,
             content: None,
             links: None,
+            extras: BTreeMap::new(),
         }
     }
 

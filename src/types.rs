@@ -356,6 +356,10 @@ pub struct Operation {
     pub security: Option<Vec<SecurityRequirement>>,
     /// An alternative server array to service this operation.
     pub servers: Option<Vec<Server>>,
+    /// Unmodeled fields, including `x-*` extensions, retained as JSON values.
+    /// Do not duplicate fields with dedicated members in this map.
+    #[serde(flatten)]
+    pub extras: BTreeMap<String, Any>,
 }
 
 /// Allows referencing an external resource for extended documentation.
@@ -478,6 +482,10 @@ pub struct Response {
     pub content: Option<BTreeMap<String, MediaType>>,
     /// A map of operations links that can be followed from the response.
     pub links: Option<BTreeMap<String, Referenceable<Link>>>,
+    /// Unmodeled fields, including `x-*` extensions, retained as JSON values.
+    /// Do not duplicate fields with dedicated members in this map.
+    #[serde(flatten)]
+    pub extras: BTreeMap<String, Any>,
 }
 
 /// A map of possible out-of band callbacks related to the parent operation.
