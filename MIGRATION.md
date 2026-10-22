@@ -57,6 +57,32 @@ let unrestricted = MediaType::new().with_schema(true);
 let stream = MediaType::new().with_item_schema(Schema::reference("#/components/schemas/Event"));
 ```
 
+## Non-schema references
+
+`Referenceable<T>` reads an object containing only `$ref` and optional `summary` /
+`description` as `Reference`, including in nested header, example, and response
+fields. Other object shapes continue through the inline `Data(T)` parser. Schema
+positions use `SchemaValue`, where `$ref` and arbitrary sibling keywords remain
+part of the schema object.
+
+`Reference` has public `summary` and `description` fields. Complete struct literals
+and exhaustive destructuring must account for the new fields; use
+`Reference::new(path)` for a pure reference, or initialize both fields to `None`.
+`Referenceable::reference` and `component_ref` keep emitting pure `$ref` objects.
+The generic Serde bound remains `T: Deserialize<'de>`, including borrowed inline
+data; no `DeserializeOwned`, `Serialize`, or `'static` bound is required.
+
+For legacy `Referenceable<Schema>` deserialization, the standard Reference Object
+shape now selects `Reference` rather than `Data`; schema objects with additional
+keywords still select `Data`. Converting either variant into `SchemaValue` retains
+its fields. Use `SchemaValue` directly when inspecting schema objects.
+
+This parsing rule does not validate documents or resolve references. Malformed
+reference candidates may still fall back to `Data(T)`; objects with additional
+fields follow that inline type's existing handling of unknown fields. The new
+metadata fields expect strings: inputs previously accepted by ignoring malformed
+`summary` / `description` values may now fail deserialization.
+
 ## Migrating schema semantics
 
 For OpenAPI 3.1/3.2, replace a 3.0 nullable primitive with a type union:
@@ -105,7 +131,7 @@ not guarantee a lossless round trip outside the supported subset.
 | Area | Remaining work |
 | --- | --- |
 | 3.1 document structure | Optional `paths`, typed `webhooks` and `jsonSchemaDialect`, `Components.pathItems`. Root `extras` retains unknown fields, but `paths` is still required. |
-| 3.1 metadata/references | `Info.summary`, `License.identifier`, non-schema Reference Object `summary` / `description`. The existing generic `Referenceable<T>` parser can treat references to all-optional objects (e.g. headers) as inline data; the new schema positions avoid that wrapper. |
+| 3.1 metadata | `Info.summary`, `License.identifier`. |
 | 3.1 security | `mutualTLS`; audit OAuth flow required fields (the legacy model requires `authorizationUrl` for every flow). |
 | 3.1 operations/links | Optional operation `responses`; `Link.operationId` remains required even when `operationRef` is used. |
 | 3.2 paths/parameters | `query`, `additionalOperations`, `in: querystring`. |

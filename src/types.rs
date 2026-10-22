@@ -34,10 +34,28 @@ pub type Any = serde_json::Value;
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum Referenceable<T> {
+    /// Reference to a component
+    Reference(#[serde(deserialize_with = "deserialize_reference_object")] Reference),
     /// Inline data
     Data(T),
-    /// Reference to a component
-    Reference(Reference),
+}
+
+fn deserialize_reference_object<'de, D>(deserializer: D) -> Result<Reference, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    // Only the Reference Object shape takes precedence over inline data. In
+    // particular, schema references with sibling keywords must remain schemas.
+    #[derive(Deserialize)]
+    #[serde(remote = "Reference", deny_unknown_fields)]
+    struct ReferenceObject {
+        #[serde(rename = "$ref")]
+        _ref: String,
+        summary: Option<String>,
+        description: Option<String>,
+    }
+
+    ReferenceObject::deserialize(deserializer)
 }
 
 impl<T> Referenceable<T> {
@@ -559,12 +577,18 @@ pub struct Reference {
     /// The reference string.
     #[serde(rename = "$ref")]
     pub _ref: String,
+    /// OpenAPI 3.1 summary overriding the referenced object's summary.
+    pub summary: Option<String>,
+    /// OpenAPI 3.1 description overriding the referenced object's description.
+    pub description: Option<String>,
 }
 
 impl Reference {
     pub fn new(reference: impl Into<String>) -> Self {
         Self {
             _ref: reference.into(),
+            summary: None,
+            description: None,
         }
     }
 }
@@ -654,7 +678,12 @@ impl From<bool> for SchemaValue {
 
 impl From<Reference> for SchemaValue {
     fn from(reference: Reference) -> Self {
-        Schema::reference(reference._ref).into()
+        let mut schema = Schema::reference(reference._ref);
+        schema.description = reference.description;
+        if let Some(summary) = reference.summary {
+            schema.extras.insert("summary".into(), summary.into());
+        }
+        schema.into()
     }
 }
 
