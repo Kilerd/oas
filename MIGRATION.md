@@ -139,10 +139,10 @@ This retention is specific to Operation, inline Response, and Components objects
 in addition to the existing root and Schema support. Other object types, such as
 Info, PathItem, Parameter, RequestBody, and MediaType, still discard their unmodeled
 fields. Extensions on the Responses container or Callback container are not
-supported. `Referenceable<T>` variant selection and the `Reference` model are
-unchanged; this change provides no general guarantee for non-schema Reference
-Objects. For lossless edits across unsupported objects, keep the original
-`serde_json::Value` and write back only the fields being changed.
+supported. These extras maps retain unmodeled object fields; they do not
+determine `Referenceable<T>` variant selection or reference semantics. For
+lossless edits across unsupported objects, keep the original `serde_json::Value`
+and write back only the fields being changed.
 
 ## Remaining model differences
 
