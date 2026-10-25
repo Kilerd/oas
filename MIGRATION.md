@@ -61,9 +61,13 @@ let stream = MediaType::new().with_item_schema(Schema::reference("#/components/s
 
 `Referenceable<T>` reads an object containing only `$ref` and optional `summary` /
 `description` as `Reference`, including in nested header, example, and response
-fields. Other object shapes continue through the inline `Data(T)` parser. Schema
-positions use `SchemaValue`, where `$ref` and arbitrary sibling keywords remain
-part of the schema object.
+fields. Other object shapes first try the inline `Data(T)` parser; if that fails,
+a reference with additional properties is accepted and those properties are
+ignored. For example, a parameter reference with `x-note` but no inline `name` /
+`in` remains readable. This fallback preserves the existing inline interpretation
+of schema siblings and generic payloads such as an Example with `$ref` and `value`.
+Schema positions use `SchemaValue`, where `$ref` and arbitrary sibling keywords
+remain part of the schema object.
 
 `Reference` has public `summary` and `description` fields. Complete struct literals
 and exhaustive destructuring must account for the new fields; use

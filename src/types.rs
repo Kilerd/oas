@@ -31,13 +31,38 @@ pub type Any = serde_json::Value;
 /// let component_ref = Referenceable::schema_ref("User");
 /// ```
 #[skip_serializing_none]
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize)]
 #[serde(untagged)]
 pub enum Referenceable<T> {
     /// Reference to a component
-    Reference(#[serde(deserialize_with = "deserialize_reference_object")] Reference),
+    Reference(Reference),
     /// Inline data
     Data(T),
+}
+
+impl<'de, T: Deserialize<'de>> Deserialize<'de> for Referenceable<T> {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        #[derive(Deserialize)]
+        #[serde(untagged)]
+        enum Candidate<T> {
+            Reference(#[serde(deserialize_with = "deserialize_reference_object")] Reference),
+            Data(T),
+            // Ignore additional Reference Object properties only after giving
+            // schema siblings and generic inline payloads a chance to parse.
+            ReferenceWithIgnoredProperties(Reference),
+        }
+
+        match Candidate::deserialize(deserializer)? {
+            Candidate::Reference(reference)
+            | Candidate::ReferenceWithIgnoredProperties(reference) => {
+                Ok(Self::Reference(reference))
+            }
+            Candidate::Data(data) => Ok(Self::Data(data)),
+        }
+    }
 }
 
 fn deserialize_reference_object<'de, D>(deserializer: D) -> Result<Reference, D::Error>

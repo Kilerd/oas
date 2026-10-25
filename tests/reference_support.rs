@@ -58,6 +58,44 @@ fn document_preserves_response_reference_annotations() {
 }
 
 #[test]
+fn document_loads_parameter_references_with_ignored_properties() {
+    let input = json!({
+        "openapi": "3.1.0",
+        "info": {"title": "References", "version": "1"},
+        "paths": {"/items": {"get": {
+            "parameters": [{
+                "$ref": "#/components/parameters/Id",
+                "summary": "Item ID",
+                "description": "The selected item",
+                "x-note": true,
+                "unrecognized": {"nested": [1, false]}
+            }],
+            "responses": {"200": {"description": "Success"}}
+        }}},
+        "components": {"parameters": {"Id": {
+            "name": "id", "in": "query", "schema": {"type": "string"}
+        }}}
+    });
+    let api: OpenAPIV3 = serde_json::from_value(input).unwrap();
+    let parameter = &api.paths["/items"]
+        .get
+        .as_ref()
+        .unwrap()
+        .parameters
+        .as_ref()
+        .unwrap()[0];
+    assert!(parameter.is_reference());
+    assert_eq!(
+        serde_json::to_value(parameter).unwrap(),
+        json!({
+            "$ref": "#/components/parameters/Id",
+            "summary": "Item ID",
+            "description": "The selected item"
+        })
+    );
+}
+
+#[test]
 fn reference_metadata_survives_conversion_to_schema_fields() {
     let reference: Reference = serde_json::from_value(json!({
         "$ref": "#/components/schemas/Item",
