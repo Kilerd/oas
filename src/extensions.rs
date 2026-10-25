@@ -525,6 +525,7 @@ impl Components {
             security_schemes: None,
             links: None,
             callbacks: None,
+            extras: BTreeMap::new(),
         }
     }
 

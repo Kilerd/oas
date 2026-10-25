@@ -292,6 +292,10 @@ pub struct Components {
     pub links: Option<BTreeMap<String, Referenceable<Link>>>,
     /// An object to hold reusable Callback Objects.
     pub callbacks: Option<BTreeMap<String, Referenceable<Callback>>>,
+    /// Unmodeled fields, including `x-*` extensions, retained as JSON values.
+    /// Do not duplicate fields with dedicated members in this map.
+    #[serde(flatten)]
+    pub extras: BTreeMap<String, Any>,
 }
 
 /// Describes the operations available on a single path.

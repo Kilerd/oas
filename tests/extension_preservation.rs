@@ -124,3 +124,55 @@ fn constructors_and_builders_do_not_emit_empty_extras() {
         json!({"summary": "List items", "responses": {"200": {"description": "ok"}}})
     );
 }
+
+#[test]
+fn components_metadata_survives_typed_readback_and_schema_deletion() {
+    let input = json!({
+        "openapi": "3.1.0",
+        "info": {"title": "Sample", "version": "1"},
+        "paths": {},
+        "components": {
+            "schemas": {"Retired": {"type": "string"}},
+            "x-business-metadata": {
+                "source": "repository-sample-app",
+                "literal": {"$ref": "ordinary metadata"},
+                "sequence": [2, 1]
+            },
+            "vendorMetadata": {"enabled": false, "value": null}
+        }
+    });
+    assert_eq!(
+        serde_json::to_value(oas::Components::new()).unwrap(),
+        json!({})
+    );
+    assert_eq!(
+        serde_json::to_value(oas::Components::default()).unwrap(),
+        json!({})
+    );
+    let mut doc: OpenAPIV3 = serde_json::from_value(input.clone()).unwrap();
+    assert_eq!(serde_json::to_value(&doc).unwrap(), input);
+    doc.components
+        .as_mut()
+        .unwrap()
+        .schemas
+        .as_mut()
+        .unwrap()
+        .remove("Retired");
+    assert_eq!(
+        serde_json::to_value(doc).unwrap(),
+        json!({
+            "openapi": "3.1.0",
+            "info": {"title": "Sample", "version": "1"},
+            "paths": {},
+            "components": {
+                "schemas": {},
+                "x-business-metadata": {
+                    "source": "repository-sample-app",
+                    "literal": {"$ref": "ordinary metadata"},
+                    "sequence": [2, 1]
+                },
+                "vendorMetadata": {"enabled": false, "value": null}
+            }
+        })
+    );
+}

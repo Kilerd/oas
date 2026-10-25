@@ -98,18 +98,18 @@ Run `cargo run --example sse` for a constructed document. The round-trip fixture
 
 ## Document editing and extensions
 
-`Operation.extras` and `Response.extras` retain unmodeled fields, including `x-*`
-extensions, in `BTreeMap<String, serde_json::Value>`. This includes unknown fields
-without the `x-` prefix; retention does not make them valid OpenAPI fields.
+`Operation.extras`, `Response.extras`, and `Components.extras` retain unmodeled
+fields, including `x-*` extensions, in `BTreeMap<String, serde_json::Value>`. This
+includes unknown fields without the `x-` prefix; retention does not make them valid OpenAPI fields.
 Values retain their JSON structure, including arrays, objects, and null. Typed
 edits such as changing `Operation.summary` or removing `PathItem.post` do not
 restore old values or deleted operations. The existing root and Schema `extras`
 behavior is unchanged.
 
-Both new maps start empty in `Operation::new`, `Response::new`, and the operation
-builders. Empty maps emit no additional JSON fields. Constructor and builder
-calls need no changes. Complete `Operation { ... }` and `Response { ... }` literals
-must add `extras: BTreeMap::new()` (or a populated map), which is a source-breaking
+The maps start empty in `Operation::new`, `Response::new`, `Components::new`,
+`Components::default`, and the operation builders. Empty maps emit no additional
+JSON fields. Constructor and builder calls need no changes. Complete
+`Operation { ... }`, `Response { ... }`, and `Components { ... }` literals must add `extras: BTreeMap::new()` (or a populated map), which is a source-breaking
 change for callers using those literals. Struct update syntax can instead reuse
 the existing constructors:
 
@@ -131,9 +131,13 @@ Use the typed member for a modeled field; do not insert keys such as `summary`,
 can result. Extensions belong to the object that owns them, not to a root-level
 copy of `paths`.
 
-This retention is specific to Operation and inline Response objects, in addition
-to the existing root and Schema support. Other object types, such as Info,
-PathItem, Parameter, RequestBody, and MediaType, still discard their unmodeled
+Components container metadata, including objects with literal `$ref` keys, is
+retained as ordinary JSON rather than parsed as a component reference. Removing
+a typed schema or another component does not restore it from container metadata.
+
+This retention is specific to Operation, inline Response, and Components objects,
+in addition to the existing root and Schema support. Other object types, such as
+Info, PathItem, Parameter, RequestBody, and MediaType, still discard their unmodeled
 fields. Extensions on the Responses container or Callback container are not
 supported. `Referenceable<T>` variant selection and the `Reference` model are
 unchanged; this change provides no general guarantee for non-schema Reference
