@@ -57,6 +57,50 @@ let unrestricted = MediaType::new().with_schema(true);
 let stream = MediaType::new().with_item_schema(Schema::reference("#/components/schemas/Event"));
 ```
 
+## Non-schema references
+
+`Referenceable<T>` reads an object containing only `$ref` and optional `summary` /
+`description` as `Reference`, including in nested header, example, and response
+fields. Other object shapes first try the inline `Data(T)` parser; if that fails,
+a reference with additional properties is accepted and those properties are
+retained in `Reference.extras`. For example, a parameter reference with `x-note`
+but no inline `name` / `in` remains readable. The extras map preserves arbitrary
+JSON values for document editing; those fields are not assigned additional
+OpenAPI Reference Object semantics. This fallback preserves the existing inline
+interpretation of schema siblings and generic payloads such as an Example with
+`$ref` and `value`. Schema positions use `SchemaValue`, where `$ref` and arbitrary
+sibling keywords remain part of the schema object.
+
+`Reference` has public `summary`, `description`, and `extras` fields. Complete
+struct literals and exhaustive destructuring must account for the new fields;
+use `Reference::new(path)` for a pure reference, or initialize both optional fields
+to `None` and `extras` to an empty map. Put `$ref`, `summary`, and `description` in
+their typed fields, not in `extras`.
+`Referenceable::reference` and `component_ref` keep emitting pure `$ref` objects.
+The generic Serde bound remains `T: Deserialize<'de>`, including borrowed inline
+data; no `DeserializeOwned`, `Serialize`, or `'static` bound is required.
+
+For legacy `Referenceable<Schema>` deserialization, the standard Reference Object
+shape now selects `Reference` rather than `Data`; schema objects with additional
+keywords still select `Data`. Converting either variant into `SchemaValue` retains
+its fields. Use `SchemaValue` directly when inspecting schema objects.
+
+`From<Reference> for SchemaValue` uses the existing Schema deserializer to promote
+siblings such as `type`, `format`, and `contentSchema` into typed fields when their
+JSON values round-trip unchanged. This lets ordinary typed edits behave like a
+direct schema read. Reference siblings need not be valid schema values: if parsing
+fails or would change a value (for example, omit `format: null`), the infallible
+conversion retains all siblings in `extras` instead, including ones that could
+have been promoted. That fallback preserves content but does not normalize schema
+fields. To edit a sibling after fallback, remove or replace its `extras` entry;
+setting the corresponding typed field to `None` does not remove the retained key.
+
+This parsing rule does not validate documents or resolve references. Malformed
+reference candidates may still fall back to `Data(T)`; objects with additional
+fields follow that inline type's existing handling of unknown fields. The new
+metadata fields expect strings: inputs previously accepted by ignoring malformed
+`summary` / `description` values may now fail deserialization.
+
 ## Migrating schema semantics
 
 For OpenAPI 3.1/3.2, replace a 3.0 nullable primitive with a type union:
@@ -187,7 +231,7 @@ lossless round trip outside the supported subset.
 | Area | Remaining work |
 | --- | --- |
 | 3.1 document structure | Optional `paths`, typed `webhooks` and `jsonSchemaDialect`. Root `extras` retains unknown fields, but `paths` is still required. |
-| 3.1 metadata/references | `Info.summary`, `License.identifier`, non-schema Reference Object `summary` / `description`. The existing generic `Referenceable<T>` parser can treat references to all-optional objects (e.g. headers) as inline data; the new schema positions avoid that wrapper. |
+| 3.1 metadata | `Info.summary`, `License.identifier`. |
 | 3.1 security | `mutualTLS`; flow-specific URL requirements are not validated. |
 | 3.1 operations/links | Optional operation `responses`; Link operation-field mutual exclusion is not validated. |
 | 3.2 paths/parameters | `query`, `additionalOperations`, `in: querystring`. |

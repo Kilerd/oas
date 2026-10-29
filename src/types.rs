@@ -38,13 +38,58 @@ fn deserialize_json_payload<'de, D: serde::Deserializer<'de>>(
 /// let component_ref = Referenceable::schema_ref("User");
 /// ```
 #[skip_serializing_none]
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize)]
 #[serde(untagged)]
 pub enum Referenceable<T> {
-    /// Inline data
-    Data(T),
     /// Reference to a component
     Reference(Reference),
+    /// Inline data
+    Data(T),
+}
+
+impl<'de, T: Deserialize<'de>> Deserialize<'de> for Referenceable<T> {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        #[derive(Deserialize)]
+        #[serde(untagged)]
+        enum Candidate<T> {
+            Reference(#[serde(deserialize_with = "deserialize_reference_object")] Reference),
+            Data(T),
+            // Accept additional Reference Object properties only after giving
+            // schema siblings and generic inline payloads a chance to parse.
+            ReferenceWithAdditionalProperties(Reference),
+        }
+
+        match Candidate::deserialize(deserializer)? {
+            Candidate::Reference(reference)
+            | Candidate::ReferenceWithAdditionalProperties(reference) => {
+                Ok(Self::Reference(reference))
+            }
+            Candidate::Data(data) => Ok(Self::Data(data)),
+        }
+    }
+}
+
+fn deserialize_reference_object<'de, D>(deserializer: D) -> Result<Reference, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    // Only the Reference Object shape takes precedence over inline data. In
+    // particular, schema references with sibling keywords must remain schemas.
+    #[derive(Deserialize)]
+    #[serde(remote = "Reference", deny_unknown_fields)]
+    struct ReferenceObject {
+        #[serde(rename = "$ref")]
+        _ref: String,
+        summary: Option<String>,
+        description: Option<String>,
+        #[serde(skip)]
+        extras: BTreeMap<String, Any>,
+    }
+
+    ReferenceObject::deserialize(deserializer)
 }
 
 impl<T> Referenceable<T> {
@@ -702,12 +747,22 @@ pub struct Reference {
     /// The reference string.
     #[serde(rename = "$ref")]
     pub _ref: String,
+    /// OpenAPI 3.1 summary overriding the referenced object's summary.
+    pub summary: Option<String>,
+    /// OpenAPI 3.1 description overriding the referenced object's description.
+    pub description: Option<String>,
+    /// Unmodeled properties retained for document editing, without reference semantics.
+    #[serde(flatten)]
+    pub extras: BTreeMap<String, Any>,
 }
 
 impl Reference {
     pub fn new(reference: impl Into<String>) -> Self {
         Self {
             _ref: reference.into(),
+            summary: None,
+            description: None,
+            extras: BTreeMap::new(),
         }
     }
 }
@@ -797,7 +852,22 @@ impl From<bool> for SchemaValue {
 
 impl From<Reference> for SchemaValue {
     fn from(reference: Reference) -> Self {
-        Schema::reference(reference._ref).into()
+        // Promote schema fields only when their wire values survive unchanged;
+        // otherwise this infallible conversion must retain arbitrary siblings.
+        let siblings = Any::Object(reference.extras.clone().into_iter().collect());
+        let mut schema = Schema::deserialize(&siblings)
+            .ok()
+            .filter(|schema| serde_json::to_value(schema).ok().as_ref() == Some(&siblings))
+            .unwrap_or_else(|| Schema {
+                extras: reference.extras,
+                ..Schema::default()
+            });
+        schema._ref = Some(reference._ref);
+        schema.description = reference.description;
+        if let Some(summary) = reference.summary {
+            schema.extras.insert("summary".into(), summary.into());
+        }
+        schema.into()
     }
 }
 
