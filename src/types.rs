@@ -50,14 +50,14 @@ impl<'de, T: Deserialize<'de>> Deserialize<'de> for Referenceable<T> {
         enum Candidate<T> {
             Reference(#[serde(deserialize_with = "deserialize_reference_object")] Reference),
             Data(T),
-            // Ignore additional Reference Object properties only after giving
+            // Accept additional Reference Object properties only after giving
             // schema siblings and generic inline payloads a chance to parse.
-            ReferenceWithIgnoredProperties(Reference),
+            ReferenceWithAdditionalProperties(Reference),
         }
 
         match Candidate::deserialize(deserializer)? {
             Candidate::Reference(reference)
-            | Candidate::ReferenceWithIgnoredProperties(reference) => {
+            | Candidate::ReferenceWithAdditionalProperties(reference) => {
                 Ok(Self::Reference(reference))
             }
             Candidate::Data(data) => Ok(Self::Data(data)),
@@ -78,6 +78,8 @@ where
         _ref: String,
         summary: Option<String>,
         description: Option<String>,
+        #[serde(skip)]
+        extras: BTreeMap<String, Any>,
     }
 
     ReferenceObject::deserialize(deserializer)
@@ -606,6 +608,9 @@ pub struct Reference {
     pub summary: Option<String>,
     /// OpenAPI 3.1 description overriding the referenced object's description.
     pub description: Option<String>,
+    /// Unmodeled properties retained for document editing, without reference semantics.
+    #[serde(flatten)]
+    pub extras: BTreeMap<String, Any>,
 }
 
 impl Reference {
@@ -614,6 +619,7 @@ impl Reference {
             _ref: reference.into(),
             summary: None,
             description: None,
+            extras: BTreeMap::new(),
         }
     }
 }
@@ -705,6 +711,7 @@ impl From<Reference> for SchemaValue {
     fn from(reference: Reference) -> Self {
         let mut schema = Schema::reference(reference._ref);
         schema.description = reference.description;
+        schema.extras = reference.extras;
         if let Some(summary) = reference.summary {
             schema.extras.insert("summary".into(), summary.into());
         }

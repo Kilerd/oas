@@ -58,7 +58,7 @@ fn document_preserves_response_reference_annotations() {
 }
 
 #[test]
-fn document_loads_parameter_references_with_ignored_properties() {
+fn document_preserves_parameter_reference_unknown_properties() {
     let input = json!({
         "openapi": "3.1.0",
         "info": {"title": "References", "version": "1"},
@@ -90,9 +90,25 @@ fn document_loads_parameter_references_with_ignored_properties() {
         json!({
             "$ref": "#/components/parameters/Id",
             "summary": "Item ID",
-            "description": "The selected item"
+            "description": "The selected item",
+            "x-note": true,
+            "unrecognized": {"nested": [1, false]}
         })
     );
+}
+
+#[test]
+fn response_reference_retains_consumer_siblings() {
+    let input = json!({
+        "$ref": "#/components/responses/Ok",
+        "summary": "override",
+        "x-public": {"order": [2, 1], "$ref": "literal"},
+        "unrecognized": [false, null, {"$ref": "also literal"}],
+        "extras": {"literal": true}
+    });
+    let reference: Referenceable<Response> = serde_json::from_value(input.clone()).unwrap();
+    assert!(reference.is_reference());
+    assert_eq!(serde_json::to_value(reference).unwrap(), input);
 }
 
 #[test]
@@ -100,7 +116,9 @@ fn reference_metadata_survives_conversion_to_schema_fields() {
     let reference: Reference = serde_json::from_value(json!({
         "$ref": "#/components/schemas/Item",
         "summary": "An item",
-        "description": "An item returned here"
+        "description": "An item returned here",
+        "x-public": {"$ref": "literal", "order": [2, 1]},
+        "unrecognized": false
     }))
     .unwrap();
     let media = MediaType::new().with_schema(Referenceable::<Schema>::Reference(reference));
@@ -110,7 +128,9 @@ fn reference_metadata_survives_conversion_to_schema_fields() {
             "schema": {
                 "$ref": "#/components/schemas/Item",
                 "summary": "An item",
-                "description": "An item returned here"
+                "description": "An item returned here",
+                "x-public": {"$ref": "literal", "order": [2, 1]},
+                "unrecognized": false
             }
         })
     );
@@ -158,6 +178,10 @@ fn schema_and_inline_siblings_are_not_discarded_by_reference_matching() {
     let inline = json!({"$ref": "application-specific", "value": 42});
     let example: Referenceable<Example> = serde_json::from_value(inline).unwrap();
     assert_eq!(example.as_data().unwrap().value, Some(json!(42)));
+    let literal = json!({"$ref": "literal", "x-public": {"$ref": "nested", "order": [2, 1]}});
+    let inline: Referenceable<serde_json::Value> = serde_json::from_value(literal.clone()).unwrap();
+    assert!(inline.is_data());
+    assert_eq!(serde_json::to_value(inline).unwrap(), literal);
     let inline: Referenceable<serde_json::Value> =
         Referenceable::data(json!({"$ref": "application-specific", "value": 42}));
     assert_eq!(

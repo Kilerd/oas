@@ -63,15 +63,19 @@ let stream = MediaType::new().with_item_schema(Schema::reference("#/components/s
 `description` as `Reference`, including in nested header, example, and response
 fields. Other object shapes first try the inline `Data(T)` parser; if that fails,
 a reference with additional properties is accepted and those properties are
-ignored. For example, a parameter reference with `x-note` but no inline `name` /
-`in` remains readable. This fallback preserves the existing inline interpretation
-of schema siblings and generic payloads such as an Example with `$ref` and `value`.
-Schema positions use `SchemaValue`, where `$ref` and arbitrary sibling keywords
-remain part of the schema object.
+retained in `Reference.extras`. For example, a parameter reference with `x-note`
+but no inline `name` / `in` remains readable. The extras map preserves arbitrary
+JSON values for document editing; those fields are not assigned additional
+OpenAPI Reference Object semantics. This fallback preserves the existing inline
+interpretation of schema siblings and generic payloads such as an Example with
+`$ref` and `value`. Schema positions use `SchemaValue`, where `$ref` and arbitrary
+sibling keywords remain part of the schema object.
 
-`Reference` has public `summary` and `description` fields. Complete struct literals
-and exhaustive destructuring must account for the new fields; use
-`Reference::new(path)` for a pure reference, or initialize both fields to `None`.
+`Reference` has public `summary`, `description`, and `extras` fields. Complete
+struct literals and exhaustive destructuring must account for the new fields;
+use `Reference::new(path)` for a pure reference, or initialize both optional fields
+to `None` and `extras` to an empty map. Put `$ref`, `summary`, and `description` in
+their typed fields, not in `extras`.
 `Referenceable::reference` and `component_ref` keep emitting pure `$ref` objects.
 The generic Serde bound remains `T: Deserialize<'de>`, including borrowed inline
 data; no `DeserializeOwned`, `Serialize`, or `'static` bound is required.
