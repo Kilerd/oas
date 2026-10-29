@@ -11,6 +11,13 @@ use std::collections::BTreeMap;
 /// Type alias for arbitrary JSON values.
 pub type Any = serde_json::Value;
 
+// A present JSON payload may itself be null; only a missing field defaults to None.
+fn deserialize_json_payload<'de, D: serde::Deserializer<'de>>(
+    deserializer: D,
+) -> Result<Option<Any>, D::Error> {
+    Any::deserialize(deserializer).map(Some)
+}
+
 /// A wrapper type that can contain either inline data or a reference to a component.
 ///
 /// This is a core type in OpenAPI specifications that allows for reusable components.
@@ -442,6 +449,7 @@ pub struct Parameter {
     /// The schema defining the type used for the parameter.
     pub schema: Option<SchemaValue>,
     /// Example of the parameter's potential value.
+    #[serde(default, deserialize_with = "deserialize_json_payload")]
     pub example: Option<Any>,
     /// Examples of the parameter's potential value.
     pub examples: Option<BTreeMap<String, Referenceable<Example>>>,
@@ -480,6 +488,7 @@ pub struct MediaType {
     #[serde(rename = "itemSchema")]
     pub item_schema: Option<SchemaValue>,
     /// Example of the media type.
+    #[serde(default, deserialize_with = "deserialize_json_payload")]
     pub example: Option<Any>,
     /// Examples of the media type.
     pub examples: Option<BTreeMap<String, Referenceable<Example>>>,
@@ -613,6 +622,7 @@ pub struct Example {
     /// Long description for the example.
     pub description: Option<String>,
     /// Embedded literal example.
+    #[serde(default, deserialize_with = "deserialize_json_payload")]
     pub value: Option<Any>,
     pub external_value: Option<String>,
     /// Unmodeled fields, including `x-*` extensions, retained as JSON values.
@@ -633,6 +643,7 @@ pub struct Link {
     /// A map representing parameters to pass to an operation.
     pub parameters: Option<BTreeMap<String, Any>>,
     /// A literal value or `{expression}` to use as a request body.
+    #[serde(default, deserialize_with = "deserialize_json_payload")]
     pub request_body: Option<Any>,
     /// A description of the link.
     pub description: Option<String>,
@@ -657,6 +668,7 @@ pub struct Header {
     pub explode: Option<bool>,
     pub allow_reserved: Option<bool>,
     pub schema: Option<SchemaValue>,
+    #[serde(default, deserialize_with = "deserialize_json_payload")]
     pub example: Option<Any>,
     pub examples: Option<BTreeMap<String, Referenceable<Example>>>,
     pub content: Option<BTreeMap<String, MediaType>>,

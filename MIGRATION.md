@@ -163,7 +163,12 @@ These extras maps retain unmodeled object fields; they do not determine
 `Referenceable<T>` variant selection or reference semantics. Retention is still
 limited: security schemes/OAuth flows and standalone Discriminator/XML objects
 lack extras maps; the root `paths` map does not support arbitrary container
-metadata. Modeled optional fields can also normalize explicit null to absence.
+metadata. Optional JSON payloads (`Parameter.example`, `Header.example`,
+`MediaType.example`, `Example.value`, and `Link.request_body`) preserve explicit
+null as `Some(serde_json::Value::Null)`; missing fields deserialize to `None`.
+Setting these typed members to `None` removes them from serialized output. Their
+Rust field types and constructor signatures are unchanged. Other modeled optional
+fields can still normalize explicit null to absence.
 For lossless edits across unsupported objects, keep the original
 `serde_json::Value` and write back only the fields being changed.
 

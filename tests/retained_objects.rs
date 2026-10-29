@@ -131,3 +131,77 @@ fn links_without_operation_id_survive_typed_operation_edits() {
     expected["summary"] = json!("edited");
     assert_eq!(serde_json::to_value(operation).unwrap(), expected);
 }
+
+#[test]
+fn arbitrary_json_payloads_distinguish_null_from_absence_and_can_be_deleted() {
+    let consumer_input = json!({"responses":{"200":{"description":"nullable body","content":{
+        "application/json":{"schema":{"type":["string","null"]},"example":null,
+            "examples":{"empty":{"value":null}}}
+    }}}});
+    let operation: Operation = serde_json::from_value(consumer_input.clone()).unwrap();
+    assert_eq!(serde_json::to_value(operation).unwrap(), consumer_input);
+
+    for value in [
+        None,
+        Some(json!(null)),
+        Some(json!(false)),
+        Some(json!({"$ref": "literal", "items": [2, 1]})),
+    ] {
+        let mut input = json!({
+            "parameters": [{"name": "q", "in": "query"}],
+            "responses": {"200": {"description": "ok", "headers": {"Public": {}},
+                "content": {"application/json": {"examples": {"empty": {}}}},
+                "links": {"next": {"operationId": "next"}}}}
+        });
+        let absent = input.clone();
+        if let Some(value) = value {
+            input["parameters"][0]["example"] = value.clone();
+            input["responses"]["200"]["headers"]["Public"]["example"] = value.clone();
+            input["responses"]["200"]["content"]["application/json"]["example"] = value.clone();
+            input["responses"]["200"]["content"]["application/json"]["examples"]["empty"]
+                ["value"] = value.clone();
+            input["responses"]["200"]["links"]["next"]["requestBody"] = value;
+        }
+        let mut operation: Operation = serde_json::from_value(input.clone()).unwrap();
+        assert_eq!(serde_json::to_value(&operation).unwrap(), input);
+        let oas::Referenceable::Data(parameter) = &mut operation.parameters.as_mut().unwrap()[0]
+        else {
+            panic!("expected inline parameter")
+        };
+        parameter.example = None;
+        let oas::Referenceable::Data(response) = operation.responses.data.get_mut("200").unwrap()
+        else {
+            panic!("expected inline response")
+        };
+        let oas::Referenceable::Data(header) = response
+            .headers
+            .as_mut()
+            .unwrap()
+            .get_mut("Public")
+            .unwrap()
+        else {
+            panic!("expected inline header")
+        };
+        header.example = None;
+        let media = response
+            .content
+            .as_mut()
+            .unwrap()
+            .get_mut("application/json")
+            .unwrap();
+        media.example = None;
+        let oas::Referenceable::Data(example) =
+            media.examples.as_mut().unwrap().get_mut("empty").unwrap()
+        else {
+            panic!("expected inline example")
+        };
+        example.value = None;
+        let oas::Referenceable::Data(link) =
+            response.links.as_mut().unwrap().get_mut("next").unwrap()
+        else {
+            panic!("expected inline link")
+        };
+        link.request_body = None;
+        assert_eq!(serde_json::to_value(operation).unwrap(), absent);
+    }
+}
