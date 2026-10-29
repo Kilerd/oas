@@ -185,7 +185,11 @@ fn converted_reference_schema_fields_behave_like_direct_schema_fields() {
         "x-public": {"order": [2, 1]}
     });
     for value in [converted, direct] {
-        assert_eq!(serde_json::to_value(value).unwrap(), expected);
+        assert_eq!(
+            serde_json::to_value(value).unwrap(),
+            expected,
+            "edited converted and direct schemas must stay identical, otherwise retained extras compete with typed edits"
+        );
     }
 }
 
