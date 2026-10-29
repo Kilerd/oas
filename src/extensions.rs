@@ -65,6 +65,7 @@ impl OpenAPIV3 {
 impl Info {
     pub fn new(title: impl Into<String>, version: impl Into<String>) -> Self {
         Self {
+            extras: BTreeMap::new(),
             title: title.into(),
             description: None,
             terms_of_service: None,
@@ -93,6 +94,7 @@ impl Info {
 impl Contact {
     pub fn new() -> Self {
         Self {
+            extras: BTreeMap::new(),
             name: None,
             url: None,
             email: None,
@@ -124,6 +126,7 @@ impl Default for Contact {
 impl License {
     pub fn new(name: impl Into<String>) -> Self {
         Self {
+            extras: BTreeMap::new(),
             name: name.into(),
             url: None,
         }
@@ -138,6 +141,7 @@ impl License {
 impl Server {
     pub fn new(url: impl Into<String>) -> Self {
         Self {
+            extras: BTreeMap::new(),
             url: url.into(),
             description: None,
             variables: None,
@@ -158,6 +162,7 @@ impl Server {
 impl ServerVariable {
     pub fn new(default: impl Into<String>) -> Self {
         Self {
+            extras: BTreeMap::new(),
             _enum: None,
             default: default.into(),
             description: None,
@@ -178,6 +183,7 @@ impl ServerVariable {
 impl PathItem {
     pub fn new() -> Self {
         Self {
+            extras: BTreeMap::new(),
             _ref: None,
             summary: None,
             description: None,
@@ -241,6 +247,7 @@ impl Operation {
             deprecated: None,
             security: None,
             servers: None,
+            extras: BTreeMap::new(),
         }
     }
 
@@ -278,6 +285,7 @@ impl Operation {
 impl Parameter {
     pub fn new(name: impl Into<String>, location: ParameterIn) -> Self {
         Self {
+            extras: BTreeMap::new(),
             name: name.into(),
             _in: location,
             description: None,
@@ -313,6 +321,7 @@ impl Parameter {
 impl RequestBody {
     pub fn new(content: BTreeMap<String, MediaType>) -> Self {
         Self {
+            extras: BTreeMap::new(),
             description: None,
             required: None,
             content,
@@ -337,6 +346,7 @@ impl Response {
             headers: None,
             content: None,
             links: None,
+            extras: BTreeMap::new(),
         }
     }
 
@@ -356,6 +366,7 @@ impl Responses {
         Self {
             default: None,
             data: BTreeMap::new(),
+            extras: BTreeMap::new(),
         }
     }
 
@@ -383,6 +394,7 @@ impl Default for Responses {
 impl MediaType {
     pub fn new() -> Self {
         Self {
+            extras: BTreeMap::new(),
             schema: None,
             item_schema: None,
             example: None,
@@ -523,6 +535,8 @@ impl Components {
             security_schemes: None,
             links: None,
             callbacks: None,
+            path_items: None,
+            extras: BTreeMap::new(),
         }
     }
 
@@ -559,6 +573,7 @@ impl Default for Components {
 impl Tag {
     pub fn new(name: impl Into<String>, description: Option<impl Into<String>>) -> Tag {
         Self {
+            extras: BTreeMap::new(),
             name: name.into(),
             description: description.map(|d| d.into()),
             external_docs: None,
@@ -566,11 +581,7 @@ impl Tag {
     }
 
     pub fn simple(name: impl Into<String>) -> Tag {
-        Self {
-            name: name.into(),
-            description: None,
-            external_docs: None,
-        }
+        Self::new(name, None::<String>)
     }
 
     /// Set the description while retaining the tag's name and external documentation.
@@ -801,13 +812,15 @@ mod tests {
             "the migrated constructor must preserve wire bytes, otherwise an API-only migration changes documents"
         );
         let mut tag = Tag::new("pets", Some("Old description"));
+        tag.extras.insert("x-tag".into(), serde_json::json!(true));
         tag.external_docs = Some(ExternalDocumentation {
             description: Some("Guide".into()),
             url: "https://example.com/guide".into(),
+            extras: BTreeMap::from([("x-doc".into(), serde_json::json!(true))]),
         });
         assert_eq!(
             serde_json::to_string(&tag.with_description("Updated")).unwrap(),
-            r#"{"name":"pets","description":"Updated","externalDocs":{"description":"Guide","url":"https://example.com/guide"}}"#,
+            r#"{"name":"pets","description":"Updated","externalDocs":{"description":"Guide","url":"https://example.com/guide","x-doc":true},"x-tag":true}"#,
             "changing the description must retain the name and docs, otherwise the builder discards caller metadata"
         );
     }

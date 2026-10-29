@@ -79,6 +79,50 @@ let unrestricted = MediaType::new().with_schema(true);
 let stream = MediaType::new().with_item_schema(Schema::reference("#/components/schemas/Event"));
 ```
 
+## Non-schema references
+
+`Referenceable<T>` reads an object containing only `$ref` and optional `summary` /
+`description` as `Reference`, including in nested header, example, and response
+fields. Other object shapes first try the inline `Data(T)` parser; if that fails,
+a reference with additional properties is accepted and those properties are
+retained in `Reference.extras`. For example, a parameter reference with `x-note`
+but no inline `name` / `in` remains readable. The extras map preserves arbitrary
+JSON values for document editing; those fields are not assigned additional
+OpenAPI Reference Object semantics. This fallback preserves the existing inline
+interpretation of schema siblings and generic payloads such as an Example with
+`$ref` and `value`. Schema positions use `SchemaValue`, where `$ref` and arbitrary
+sibling keywords remain part of the schema object.
+
+`Reference` has public `summary`, `description`, and `extras` fields. Complete
+struct literals and exhaustive destructuring must account for the new fields;
+use `Reference::new(path)` for a pure reference, or initialize both optional fields
+to `None` and `extras` to an empty map. Put `$ref`, `summary`, and `description` in
+their typed fields, not in `extras`.
+`Referenceable::reference` and `component_ref` keep emitting pure `$ref` objects.
+The generic Serde bound remains `T: Deserialize<'de>`, including borrowed inline
+data; no `DeserializeOwned`, `Serialize`, or `'static` bound is required.
+
+For legacy `Referenceable<Schema>` deserialization, the standard Reference Object
+shape now selects `Reference` rather than `Data`; schema objects with additional
+keywords still select `Data`. Converting either variant into `SchemaValue` retains
+its fields. Use `SchemaValue` directly when inspecting schema objects.
+
+`From<Reference> for SchemaValue` uses the existing Schema deserializer to promote
+siblings such as `type`, `format`, and `contentSchema` into typed fields when their
+JSON values round-trip unchanged. This lets ordinary typed edits behave like a
+direct schema read. Reference siblings need not be valid schema values: if parsing
+fails or would change a value (for example, omit `format: null`), the infallible
+conversion retains all siblings in `extras` instead, including ones that could
+have been promoted. That fallback preserves content but does not normalize schema
+fields. To edit a sibling after fallback, remove or replace its `extras` entry;
+setting the corresponding typed field to `None` does not remove the retained key.
+
+This parsing rule does not validate documents or resolve references. Malformed
+reference candidates may still fall back to `Data(T)`; objects with additional
+fields follow that inline type's existing handling of unknown fields. The new
+metadata fields expect strings: inputs previously accepted by ignoring malformed
+`summary` / `description` values may now fail deserialization.
+
 ## Migrating schema semantics
 
 For OpenAPI 3.1/3.2, replace a 3.0 nullable primitive with a type union:
@@ -118,18 +162,100 @@ in this crate. See the [OpenAPI SSE rules](https://spec.openapis.org/oas/v3.2.0.
 Run `cargo run --example sse` for a constructed document. The round-trip fixture is
 [examples/v3.2/json/sse.json](examples/v3.2/json/sse.json).
 
+## Document editing and extensions
+
+The following objects retain unmodeled fields in public
+`extras: BTreeMap<String, serde_json::Value>` maps:
+
+- `Info`, `Contact`, `License`, `Server`, `ServerVariable`, and `Tag`;
+- `PathItem`, `Operation`, `ExternalDocumentation`, and `Parameter`;
+- `RequestBody`, `MediaType`, `Encoding`, `Response`, `Header`, `Link`, and `Example`;
+- `Components`, `Responses`, and `Callback` containers;
+- `SecurityScheme`, `OauthFlows`, and `OauthFlow`.
+
+This includes `x-*` extensions and unknown fields without that prefix; retention
+does not make them valid OpenAPI fields.
+Values retain their JSON structure, including arrays, objects, and null. Typed
+edits such as changing `Operation.summary` or removing `PathItem.post` do not
+restore old values or deleted operations. The existing root and Schema `extras`
+behavior is unchanged.
+
+Existing constructors, defaults, and builders initialize the maps empty, emitting
+no additional JSON fields. Constructor and builder calls need no changes.
+Complete struct literals for every type listed above must add
+`extras: BTreeMap::new()` (or a populated map), which is a **source-breaking**
+change. `Components` literals also need `path_items: None` (or a populated map).
+`Components.path_items: Option<BTreeMap<String, PathItem>>` exposes reusable
+OpenAPI 3.1 path items for typed edits; values formerly stored under
+`Components.extras["pathItems"]` now deserialize into that field.
+`Link.operation_id` is now `Option<String>`: wrap existing values in `Some(...)`;
+use `None` for `operationRef` or documentation-only links. This allows retention
+without enforcing link validity or the mutual exclusion of its operation fields.
+`OauthFlow.authorization_url` is now `Option<String>`: wrap existing URLs in
+`Some(...)`, and use `None` for password and client credentials flows. Implicit
+flows use `authorizationUrl`; password and client credentials use `tokenUrl`;
+authorization code uses both. The shared flow model preserves these shapes
+without enforcing flow-specific URL requirements. Complete security scheme,
+flow-container, and flow literals also need `extras: BTreeMap::new()`.
+Struct update syntax can instead reuse an existing constructor, where available:
+
+```rust
+use oas::{Operation, Response, Responses};
+
+let operation = Operation {
+    summary: Some("List items".into()),
+    ..Operation::new(Responses::new())
+};
+let response = Response {
+    description: "Success".into(),
+    ..Response::new("Success")
+};
+```
+
+Use the typed member for a modeled field; do not insert keys such as `summary`,
+`responses`, or `description` into that object's `extras`, as duplicate JSON keys
+can result. Extensions belong to the object that owns them, not to a root-level
+copy of `paths`.
+
+Components container metadata, including objects with literal `$ref` keys, is
+retained as ordinary JSON rather than parsed as a component reference. Removing
+a typed schema or another component does not restore it from container metadata.
+
+Responses separates `default` and HTTP status keys (`100`–`599`, `1XX`–`5XX`)
+from container metadata. Other keys now deserialize into `Responses.extras`
+rather than `Responses.data`. Callback keys containing `{` deserialize into
+`Callback.data` as Path Items, including URL-prefixed expressions; all `x-*`
+keys and other keys deserialize into `Callback.extras`. This classifies entries
+without validating runtime expression syntax. Malformed values at typed keys
+still fail deserialization. Metadata is never interpreted as a reference or
+traversed as a response/path item. Deleting typed entries does not restore them.
+Keep status/expression keys in `data`, and other keys in `extras`; duplicate keys
+across these maps can produce duplicate JSON fields.
+
+These extras maps retain unmodeled object fields; they do not determine
+`Referenceable<T>` variant selection or reference semantics. Retention is still
+limited: standalone Discriminator/XML objects lack extras maps; the root `paths`
+map does not support arbitrary container metadata. Optional JSON payloads (`Parameter.example`, `Header.example`,
+`MediaType.example`, `Example.value`, and `Link.request_body`) preserve explicit
+null as `Some(serde_json::Value::Null)`; missing fields deserialize to `None`.
+Setting these typed members to `None` removes them from serialized output. Their
+Rust field types and constructor signatures are unchanged. Other modeled optional
+fields can still normalize explicit null to absence.
+For lossless edits across unsupported objects, keep the original
+`serde_json::Value` and write back only the fields being changed.
+
 ## Remaining model differences
 
-This inventory compares the existing model to OpenAPI 3.1/3.2. Unknown fields on
-most non-schema objects are currently discarded; successful parsing alone does
-not guarantee a lossless round trip outside the supported subset.
+This inventory compares the existing model to OpenAPI 3.1/3.2. Field preservation
+is limited as described above; successful parsing alone does not guarantee a
+lossless round trip outside the supported subset.
 
 | Area | Remaining work |
 | --- | --- |
-| 3.1 document structure | Optional `paths`, typed `webhooks` and `jsonSchemaDialect`, `Components.pathItems`. Root `extras` retains unknown fields, but `paths` is still required. |
-| 3.1 metadata/references | `Info.summary`, `License.identifier`, non-schema Reference Object `summary` / `description`. The existing generic `Referenceable<T>` parser can treat references to all-optional objects (e.g. headers) as inline data; the new schema positions avoid that wrapper. |
-| 3.1 security | `mutualTLS`; audit OAuth flow required fields (the legacy model requires `authorizationUrl` for every flow). |
-| 3.1 operations/links | Optional operation `responses`; `Link.operationId` remains required even when `operationRef` is used. |
+| 3.1 document structure | Optional `paths`, typed `webhooks` and `jsonSchemaDialect`. Root `extras` retains unknown fields, but `paths` is still required. |
+| 3.1 metadata | `Info.summary`, `License.identifier`. |
+| 3.1 security | `mutualTLS`; flow-specific URL requirements are not validated. |
+| 3.1 operations/links | Optional operation `responses`; Link operation-field mutual exclusion is not validated. |
 | 3.2 paths/parameters | `query`, `additionalOperations`, `in: querystring`. |
 | 3.2 media/encoding | Reusable `Components.mediaTypes` and references in content maps; `prefixEncoding`, `itemEncoding`, and nested encoding fields. |
 | 3.2 metadata/examples | Server `name`, tag `summary` / `parent` / `kind`, example `dataValue` / `serializedValue`. Root `$self` is retained only through `extras`. |

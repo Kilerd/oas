@@ -192,10 +192,11 @@ let spec: OpenAPIV3 = serde_json::from_str(json_spec).unwrap();
 println!("{}", serde_json::to_string_pretty(&spec).unwrap());
 ```
 
-Serde support can also be used with a separately chosen YAML serializer. Unknown
-schema keywords are preserved; unknown fields on most other objects are currently
-discarded. Successful deserialization does not guarantee a valid document or a
-lossless round trip for unsupported fields.
+Serde support can also be used with a separately chosen YAML serializer. For
+field preservation when editing a typed document, see
+[document editing and extensions](MIGRATION.md#document-editing-and-extensions).
+Successful deserialization does not guarantee a valid document or a lossless
+round trip for unsupported fields.
 
 ## More examples and documentation
 
