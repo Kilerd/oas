@@ -5,7 +5,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 Rust OpenAPI models with Serde serialization and builders for constructing and
-editing API descriptions. The `1.0.0-dev` prerelease preserves retained-object
+editing API descriptions. The `0.4.0-dev` prerelease preserves retained-object
 metadata and reference annotations during typed edits. It includes schema type
 unions, boolean schemas, references with sibling keywords, and OpenAPI 3.2
 streaming media types, including Server-Sent Events (SSE).
@@ -20,7 +20,7 @@ changes and remaining model differences.
 
 ```toml
 [dependencies]
-oas = "=1.0.0-dev"
+oas = "=0.4.0-dev"
 serde_json = "1"
 ```
 
@@ -28,7 +28,7 @@ This prerelease introduces Rust source changes: retained objects and references
 gain metadata fields, Link operation IDs and OAuth authorization URLs become
 optional, OAuth flow storage is boxed, and `Tag::with_description` edits an
 existing tag. Complete struct literals need adaptation. See the
-[1.0.0-dev changelog](CHANGELOG.md#100-dev---2026-10-29) and
+[0.4.0-dev changelog](CHANGELOG.md#040-dev---2026-10-29) and
 [Rust API migration](MIGRATION.md).
 
 ## Quick start
@@ -202,7 +202,7 @@ round trip for unsupported fields.
 
 ## More examples and documentation
 
-- [API reference for 1.0.0-dev](https://docs.rs/oas/1.0.0-dev/oas/)
+- [API reference for 0.4.0-dev](https://docs.rs/oas/0.4.0-dev/oas/)
 - [Usage guide](https://github.com/Kilerd/oas/blob/main/USAGE_GUIDE.md) for builders, operations, parameters, and reusable components
 - [Basic builder example](https://github.com/Kilerd/oas/blob/main/examples/easy_usage.rs)
 - [Complete API example](https://github.com/Kilerd/oas/blob/main/examples/comprehensive_example.rs)
