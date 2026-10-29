@@ -90,9 +90,10 @@ siblings such as `type`, `format`, and `contentSchema` into typed fields when th
 JSON values round-trip unchanged. This lets ordinary typed edits behave like a
 direct schema read. Reference siblings need not be valid schema values: if parsing
 fails or would change a value (for example, omit `format: null`), the infallible
-conversion retains all siblings in `extras` instead. That fallback preserves
-content but does not normalize schema fields; callers should inspect the retained
-extras before typed edits to the same keys.
+conversion retains all siblings in `extras` instead, including ones that could
+have been promoted. That fallback preserves content but does not normalize schema
+fields. To edit a sibling after fallback, remove or replace its `extras` entry;
+setting the corresponding typed field to `None` does not remove the retained key.
 
 This parsing rule does not validate documents or resolve references. Malformed
 reference candidates may still fall back to `Data(T)`; objects with additional
