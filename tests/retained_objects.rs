@@ -1,6 +1,7 @@
 use oas::{OpenAPIV3, Operation};
 use serde_json::json;
 
+/// Regression: gateway summary edits dropped metadata on nested retained objects.
 #[test]
 fn retained_objects_keep_metadata_after_typed_summary_edit() {
     let input = json!({
@@ -35,9 +36,13 @@ fn retained_objects_keep_metadata_after_typed_summary_edit() {
         .summary = Some("after".into());
     let mut expected = input;
     expected["paths"]["/a"]["get"]["summary"] = json!("after");
-    assert_eq!(serde_json::to_value(doc).unwrap(), expected);
+    assert_eq!(
+        serde_json::to_value(doc).unwrap(), expected,
+        "must retain unrelated object metadata, otherwise a summary edit silently loses document fields"
+    );
 }
 
+/// Regression: callback metadata failed parsing and Responses metadata was treated as responses.
 #[test]
 fn patterned_containers_keep_metadata_when_typed_entries_are_removed() {
     let input = json!({
@@ -78,9 +83,13 @@ fn patterned_containers_keep_metadata_when_typed_entries_are_removed() {
         .as_object_mut()
         .unwrap()
         .remove("{$request.query.callback}");
-    assert_eq!(serde_json::to_value(operation).unwrap(), expected);
+    assert_eq!(
+        serde_json::to_value(operation).unwrap(), expected,
+        "must preserve metadata and remove typed entries, otherwise container edits lose data or restore deleted entries"
+    );
 }
 
+/// Guard: retaining container metadata must not hide malformed values at typed keys.
 #[test]
 fn malformed_patterned_entries_are_not_hidden_as_metadata() {
     for input in [
@@ -88,16 +97,19 @@ fn malformed_patterned_entries_are_not_hidden_as_metadata() {
         json!({"2XX": {}}),
         json!({"default": 4}),
     ] {
-        assert!(serde_json::from_value::<oas::Responses>(input).is_err());
+        assert!(serde_json::from_value::<oas::Responses>(input).is_err(),
+            "must reject malformed status responses, otherwise metadata retention hides invalid typed values");
     }
     for key in [
         "{$request.query.callback}",
         "https://example.com/{$request.body#/id}",
     ] {
-        assert!(serde_json::from_value::<oas::Callback>(json!({key: false})).is_err());
+        assert!(serde_json::from_value::<oas::Callback>(json!({key: false})).is_err(),
+            "must reject malformed callback path items, otherwise expression entries become opaque metadata");
     }
 }
 
+/// Regression: reusable path items were opaque JSON and unavailable for typed edits.
 #[test]
 fn reusable_path_items_can_be_edited_and_deleted_without_metadata_backfill() {
     let input = json!({"pathItems": {
@@ -114,10 +126,12 @@ fn reusable_path_items_can_be_edited_and_deleted_without_metadata_backfill() {
         json!({
             "pathItems": {"Public": {"$ref": "#/paths/~1a", "summary": "public",
                 "x-path": {"$ref": "literal"}}}, "x-components": [2, 1]
-        })
+        }),
+        "must apply typed path-item edits without restoring removed entries, otherwise component assembly keeps stale paths"
     );
 }
 
+/// Regression: operationRef-only and documentation-only links failed on a required operationId.
 #[test]
 fn links_without_operation_id_survive_typed_operation_edits() {
     let input = json!({"responses": {"200": {"description": "ok", "links": {
@@ -129,9 +143,13 @@ fn links_without_operation_id_survive_typed_operation_edits() {
     operation.summary = Some("edited".into());
     let mut expected = input;
     expected["summary"] = json!("edited");
-    assert_eq!(serde_json::to_value(operation).unwrap(), expected);
+    assert_eq!(
+        serde_json::to_value(operation).unwrap(), expected,
+        "must retain all Link forms, otherwise editing an operation discards links without operationId"
+    );
 }
 
+/// Regression: nullable response examples and example values disappeared during typed readback.
 #[test]
 fn arbitrary_json_payloads_distinguish_null_from_absence_and_can_be_deleted() {
     let consumer_input = json!({"responses":{"200":{"description":"nullable body","content":{
@@ -139,7 +157,11 @@ fn arbitrary_json_payloads_distinguish_null_from_absence_and_can_be_deleted() {
             "examples":{"empty":{"value":null}}}
     }}}});
     let operation: Operation = serde_json::from_value(consumer_input.clone()).unwrap();
-    assert_eq!(serde_json::to_value(operation).unwrap(), consumer_input);
+    assert_eq!(
+        serde_json::to_value(operation).unwrap(),
+        consumer_input,
+        "must preserve explicit null examples, otherwise nullable payload examples disappear"
+    );
 
     for value in [
         None,
@@ -163,7 +185,8 @@ fn arbitrary_json_payloads_distinguish_null_from_absence_and_can_be_deleted() {
             input["responses"]["200"]["links"]["next"]["requestBody"] = value;
         }
         let mut operation: Operation = serde_json::from_value(input.clone()).unwrap();
-        assert_eq!(serde_json::to_value(&operation).unwrap(), input);
+        assert_eq!(serde_json::to_value(&operation).unwrap(), input,
+            "must distinguish absent payloads from JSON values, otherwise typed readback changes example semantics");
         let oas::Referenceable::Data(parameter) = &mut operation.parameters.as_mut().unwrap()[0]
         else {
             panic!("expected inline parameter")
@@ -202,6 +225,7 @@ fn arbitrary_json_payloads_distinguish_null_from_absence_and_can_be_deleted() {
             panic!("expected inline link")
         };
         link.request_body = None;
-        assert_eq!(serde_json::to_value(operation).unwrap(), absent);
+        assert_eq!(serde_json::to_value(operation).unwrap(), absent,
+            "must omit payloads set to None, otherwise typed deletion leaves stale examples or link bodies");
     }
 }

@@ -56,6 +56,7 @@ fn typed_summary_edit_and_operation_deletion_preserve_extensions() {
     );
 }
 
+/// Guard: object-local extras must support replacement and deletion after typed readback.
 #[test]
 fn unmodeled_operation_and_response_fields_can_be_edited_and_removed() {
     let mut operation: Operation = serde_json::from_value(json!({
@@ -86,10 +87,12 @@ fn unmodeled_operation_and_response_fields_can_be_edited_and_removed() {
                 "vendorMetadata": {"revision": 1}
             }},
             "vendorMetadata": {"revision": 2}
-        })
+        }),
+        "must serialize current extras including removals, otherwise edits retain stale metadata"
     );
 }
 
+/// Compatibility: adding extras must not alter the existing compact constructor wire format.
 #[test]
 fn constructors_and_builders_do_not_emit_empty_extras() {
     let operation = Operation::new(
@@ -99,12 +102,14 @@ fn constructors_and_builders_do_not_emit_empty_extras() {
         .response("200", Referenceable::ok("ok"))
         .build();
     assert_eq!(
-        serde_json::to_value(operation).unwrap(),
-        json!({"responses": {"200": {"description": "ok"}}})
+        serde_json::to_string(&operation).unwrap(),
+        r#"{"responses":{"200":{"description":"ok"}}}"#,
+        "must keep compact constructor bytes stable, otherwise empty extras change the wire format"
     );
     assert_eq!(
-        serde_json::to_value(built).unwrap(),
-        json!({"summary": "List items", "responses": {"200": {"description": "ok"}}})
+        serde_json::to_string(&built).unwrap(),
+        r#"{"summary":"List items","responses":{"200":{"description":"ok"}}}"#,
+        "must keep compact builder bytes stable, otherwise empty extras change the wire format"
     );
 }
 
