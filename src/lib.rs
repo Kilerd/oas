@@ -60,6 +60,7 @@
 // Module declarations
 pub mod builders;
 pub mod extensions;
+mod parameter_location;
 pub mod security;
 pub mod types;
 

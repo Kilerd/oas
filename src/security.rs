@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 use serde_with::skip_serializing_none;
 use std::collections::BTreeMap;
 
-use crate::types::ParameterIn;
+use crate::parameter_location::ParameterIn;
 
 /// The type of the security scheme.
 #[skip_serializing_none]
