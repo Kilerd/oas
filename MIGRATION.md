@@ -33,6 +33,19 @@ coverage. The remaining differences are listed below.
 source change; serialized tags keep the same fields and values. Updating an
 existing tag's description preserves its name and external documentation.
 
+## Unreleased Rust API change: OAuth flow storage
+
+`SecurityType::Oauth2::flows` is now `Box<OauthFlows>` to reduce the inline size
+of `SecurityType`. This is a source-breaking change after 0.3.0; the OAuth JSON
+representation is unchanged.
+
+- Construct or replace the field with `Box::new(flows)` instead of `flows`:
+  `SecurityType::Oauth2 { flows: Box::new(flows) }`.
+- Destructuring `SecurityType::Oauth2 { flows }` now yields `Box<OauthFlows>`.
+  Use `let flows: OauthFlows = *flows;` when an owned, unboxed value is needed.
+- Borrowed field access continues to dereference automatically; use
+  `flows.as_ref()` or `flows.as_mut()` when an explicit reference is needed.
+
 ## Rust API migration
 
 `Schema` remains the object form, with `extras` retaining unmodeled keywords and
