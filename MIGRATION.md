@@ -98,20 +98,33 @@ Run `cargo run --example sse` for a constructed document. The round-trip fixture
 
 ## Document editing and extensions
 
-`Operation.extras`, `Response.extras`, and `Components.extras` retain unmodeled
-fields, including `x-*` extensions, in `BTreeMap<String, serde_json::Value>`. This
-includes unknown fields without the `x-` prefix; retention does not make them valid OpenAPI fields.
+The following objects retain unmodeled fields in public
+`extras: BTreeMap<String, serde_json::Value>` maps:
+
+- `Info`, `Contact`, `License`, `Server`, `ServerVariable`, and `Tag`;
+- `PathItem`, `Operation`, `ExternalDocumentation`, and `Parameter`;
+- `RequestBody`, `MediaType`, `Encoding`, `Response`, `Header`, `Link`, and `Example`;
+- `Components`, `Responses`, and `Callback` containers.
+
+This includes `x-*` extensions and unknown fields without that prefix; retention
+does not make them valid OpenAPI fields.
 Values retain their JSON structure, including arrays, objects, and null. Typed
 edits such as changing `Operation.summary` or removing `PathItem.post` do not
 restore old values or deleted operations. The existing root and Schema `extras`
 behavior is unchanged.
 
-The maps start empty in `Operation::new`, `Response::new`, `Components::new`,
-`Components::default`, and the operation builders. Empty maps emit no additional
-JSON fields. Constructor and builder calls need no changes. Complete
-`Operation { ... }`, `Response { ... }`, and `Components { ... }` literals must add `extras: BTreeMap::new()` (or a populated map), which is a source-breaking
-change for callers using those literals. Struct update syntax can instead reuse
-the existing constructors:
+Existing constructors, defaults, and builders initialize the maps empty, emitting
+no additional JSON fields. Constructor and builder calls need no changes.
+Complete struct literals for every type listed above must add
+`extras: BTreeMap::new()` (or a populated map), which is a **source-breaking**
+change. `Components` literals also need `path_items: None` (or a populated map).
+`Components.path_items: Option<BTreeMap<String, PathItem>>` exposes reusable
+OpenAPI 3.1 path items for typed edits; values formerly stored under
+`Components.extras["pathItems"]` now deserialize into that field.
+`Link.operation_id` is now `Option<String>`: wrap existing values in `Some(...)`;
+use `None` for `operationRef` or documentation-only links. This allows retention
+without enforcing link validity or the mutual exclusion of its operation fields.
+Struct update syntax can instead reuse an existing constructor, where available:
 
 ```rust
 use oas::{Operation, Response, Responses};
@@ -135,14 +148,24 @@ Components container metadata, including objects with literal `$ref` keys, is
 retained as ordinary JSON rather than parsed as a component reference. Removing
 a typed schema or another component does not restore it from container metadata.
 
-This retention is specific to Operation, inline Response, and Components objects,
-in addition to the existing root and Schema support. Other object types, such as
-Info, PathItem, Parameter, RequestBody, and MediaType, still discard their unmodeled
-fields. Extensions on the Responses container or Callback container are not
-supported. These extras maps retain unmodeled object fields; they do not
-determine `Referenceable<T>` variant selection or reference semantics. For
-lossless edits across unsupported objects, keep the original `serde_json::Value`
-and write back only the fields being changed.
+Responses separates `default` and HTTP status keys (`100`–`599`, `1XX`–`5XX`)
+from container metadata. Other keys now deserialize into `Responses.extras`
+rather than `Responses.data`. Callback keys containing `{` deserialize into
+`Callback.data` as Path Items, including URL-prefixed expressions; all `x-*`
+keys and other keys deserialize into `Callback.extras`. This classifies entries
+without validating runtime expression syntax. Malformed values at typed keys
+still fail deserialization. Metadata is never interpreted as a reference or
+traversed as a response/path item. Deleting typed entries does not restore them.
+Keep status/expression keys in `data`, and other keys in `extras`; duplicate keys
+across these maps can produce duplicate JSON fields.
+
+These extras maps retain unmodeled object fields; they do not determine
+`Referenceable<T>` variant selection or reference semantics. Retention is still
+limited: security schemes/OAuth flows and standalone Discriminator/XML objects
+lack extras maps; the root `paths` map does not support arbitrary container
+metadata. Modeled optional fields can also normalize explicit null to absence.
+For lossless edits across unsupported objects, keep the original
+`serde_json::Value` and write back only the fields being changed.
 
 ## Remaining model differences
 
@@ -152,10 +175,10 @@ lossless round trip outside the supported subset.
 
 | Area | Remaining work |
 | --- | --- |
-| 3.1 document structure | Optional `paths`, typed `webhooks` and `jsonSchemaDialect`, `Components.pathItems`. Root `extras` retains unknown fields, but `paths` is still required. |
+| 3.1 document structure | Optional `paths`, typed `webhooks` and `jsonSchemaDialect`. Root `extras` retains unknown fields, but `paths` is still required. |
 | 3.1 metadata/references | `Info.summary`, `License.identifier`, non-schema Reference Object `summary` / `description`. The existing generic `Referenceable<T>` parser can treat references to all-optional objects (e.g. headers) as inline data; the new schema positions avoid that wrapper. |
 | 3.1 security | `mutualTLS`; audit OAuth flow required fields (the legacy model requires `authorizationUrl` for every flow). |
-| 3.1 operations/links | Optional operation `responses`; `Link.operationId` remains required even when `operationRef` is used. |
+| 3.1 operations/links | Optional operation `responses`; Link operation-field mutual exclusion is not validated. |
 | 3.2 paths/parameters | `query`, `additionalOperations`, `in: querystring`. |
 | 3.2 media/encoding | Reusable `Components.mediaTypes` and references in content maps; `prefixEncoding`, `itemEncoding`, and nested encoding fields. |
 | 3.2 metadata/examples | Server `name`, tag `summary` / `parent` / `kind`, example `dataValue` / `serializedValue`. Root `$self` is retained only through `extras`. |

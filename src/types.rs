@@ -220,6 +220,10 @@ pub struct Info {
     pub license: Option<License>,
     /// The version of the OpenAPI document.
     pub version: String,
+    /// Unmodeled fields, including `x-*` extensions, retained as JSON values.
+    /// Do not duplicate fields with dedicated members in this map.
+    #[serde(flatten)]
+    pub extras: BTreeMap<String, Any>,
 }
 
 /// Contact information for the exposed API.
@@ -232,6 +236,10 @@ pub struct Contact {
     pub url: Option<String>,
     /// The email address of the contact person/organization.
     pub email: Option<String>,
+    /// Unmodeled fields, including `x-*` extensions, retained as JSON values.
+    /// Do not duplicate fields with dedicated members in this map.
+    #[serde(flatten)]
+    pub extras: BTreeMap<String, Any>,
 }
 
 /// License information for the exposed API.
@@ -242,6 +250,10 @@ pub struct License {
     pub name: String,
     /// A URL to the license used for the API. MUST be in the format of a URL.
     pub url: Option<String>,
+    /// Unmodeled fields, including `x-*` extensions, retained as JSON values.
+    /// Do not duplicate fields with dedicated members in this map.
+    #[serde(flatten)]
+    pub extras: BTreeMap<String, Any>,
 }
 
 /// An object representing a Server.
@@ -254,6 +266,10 @@ pub struct Server {
     pub description: Option<String>,
     /// A map between a variable name and its value.
     pub variables: Option<BTreeMap<String, ServerVariable>>,
+    /// Unmodeled fields, including `x-*` extensions, retained as JSON values.
+    /// Do not duplicate fields with dedicated members in this map.
+    #[serde(flatten)]
+    pub extras: BTreeMap<String, Any>,
 }
 
 /// An object representing a Server Variable for server URL template substitution.
@@ -267,6 +283,10 @@ pub struct ServerVariable {
     pub default: String,
     /// An optional description for the server variable.
     pub description: Option<String>,
+    /// Unmodeled fields, including `x-*` extensions, retained as JSON values.
+    /// Do not duplicate fields with dedicated members in this map.
+    #[serde(flatten)]
+    pub extras: BTreeMap<String, Any>,
 }
 
 /// Holds a set of reusable objects for different aspects of the OAS.
@@ -292,6 +312,8 @@ pub struct Components {
     pub links: Option<BTreeMap<String, Referenceable<Link>>>,
     /// An object to hold reusable Callback Objects.
     pub callbacks: Option<BTreeMap<String, Referenceable<Callback>>>,
+    /// Reusable Path Item Objects (OpenAPI 3.1 and later).
+    pub path_items: Option<BTreeMap<String, PathItem>>,
     /// Unmodeled fields, including `x-*` extensions, retained as JSON values.
     /// Do not duplicate fields with dedicated members in this map.
     #[serde(flatten)]
@@ -329,6 +351,10 @@ pub struct PathItem {
     pub servers: Option<Vec<Server>>,
     /// A list of parameters that are applicable for all the operations described under this path.
     pub parameters: Option<Vec<Referenceable<Parameter>>>,
+    /// Unmodeled fields, including `x-*` extensions, retained as JSON values.
+    /// Do not duplicate fields with dedicated members in this map.
+    #[serde(flatten)]
+    pub extras: BTreeMap<String, Any>,
 }
 
 /// Describes a single API operation on a path.
@@ -374,6 +400,10 @@ pub struct ExternalDocumentation {
     pub description: Option<String>,
     /// The URL for the target documentation.
     pub url: String,
+    /// Unmodeled fields, including `x-*` extensions, retained as JSON values.
+    /// Do not duplicate fields with dedicated members in this map.
+    #[serde(flatten)]
+    pub extras: BTreeMap<String, Any>,
 }
 
 /// The location of the parameter.
@@ -417,6 +447,10 @@ pub struct Parameter {
     pub examples: Option<BTreeMap<String, Referenceable<Example>>>,
     /// A map containing the representations for the parameter.
     pub content: Option<BTreeMap<String, MediaType>>,
+    /// Unmodeled fields, including `x-*` extensions, retained as JSON values.
+    /// Do not duplicate fields with dedicated members in this map.
+    #[serde(flatten)]
+    pub extras: BTreeMap<String, Any>,
 }
 
 /// Describes a single request body.
@@ -429,6 +463,10 @@ pub struct RequestBody {
     pub required: Option<bool>,
     /// The content of the request body.
     pub content: BTreeMap<String, MediaType>,
+    /// Unmodeled fields, including `x-*` extensions, retained as JSON values.
+    /// Do not duplicate fields with dedicated members in this map.
+    #[serde(flatten)]
+    pub extras: BTreeMap<String, Any>,
 }
 
 /// Each Media Type Object provides schema and examples for the media type identified by its key.
@@ -447,6 +485,10 @@ pub struct MediaType {
     pub examples: Option<BTreeMap<String, Referenceable<Example>>>,
     /// A map between a property name and its encoding information.
     pub encoding: Option<BTreeMap<String, Encoding>>,
+    /// Unmodeled fields, including `x-*` extensions, retained as JSON values.
+    /// Do not duplicate fields with dedicated members in this map.
+    #[serde(flatten)]
+    pub extras: BTreeMap<String, Any>,
 }
 
 /// A single encoding definition applied to a single schema property.
@@ -462,16 +504,50 @@ pub struct Encoding {
     pub style: Option<String>,
     pub explode: Option<bool>,
     pub allow_reserved: Option<bool>,
+    /// Unmodeled fields, including `x-*` extensions, retained as JSON values.
+    /// Do not duplicate fields with dedicated members in this map.
+    #[serde(flatten)]
+    pub extras: BTreeMap<String, Any>,
 }
 
 /// A container for the expected responses of an operation.
 #[skip_serializing_none]
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize)]
 pub struct Responses {
     /// The documentation of responses other than the ones declared for specific HTTP response codes.
     pub default: Option<Referenceable<Response>>,
+    /// HTTP status codes (100–599) and uppercase ranges (1XX–5XX).
     #[serde(flatten)]
     pub data: BTreeMap<String, Referenceable<Response>>,
+    /// Other container fields, including extensions, retained as ordinary JSON.
+    /// Do not duplicate `default` or status keys in this map.
+    #[serde(flatten)]
+    pub extras: BTreeMap<String, Any>,
+}
+
+impl<'de> Deserialize<'de> for Responses {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let fields = BTreeMap::<String, Any>::deserialize(deserializer)?;
+        let mut responses = Self::new();
+        for (key, value) in fields {
+            let bytes = key.as_bytes();
+            if key == "default" {
+                responses.default =
+                    serde_json::from_value(value).map_err(serde::de::Error::custom)?;
+            } else if bytes.len() == 3
+                && (b'1'..=b'5').contains(&bytes[0])
+                && (bytes[1..] == *b"XX" || bytes[1..].iter().all(u8::is_ascii_digit))
+            {
+                responses.data.insert(
+                    key,
+                    serde_json::from_value(value).map_err(serde::de::Error::custom)?,
+                );
+            } else {
+                responses.extras.insert(key, value);
+            }
+        }
+        Ok(responses)
+    }
 }
 
 /// Describes a single response from an API Operation.
@@ -494,10 +570,37 @@ pub struct Response {
 
 /// A map of possible out-of band callbacks related to the parent operation.
 #[skip_serializing_none]
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize)]
 pub struct Callback {
+    /// Callback URL expressions, including URLs with an embedded `{expression}`.
     #[serde(flatten)]
     pub data: BTreeMap<String, PathItem>,
+    /// Other container fields, including extensions, retained as ordinary JSON.
+    /// Do not duplicate expression keys in this map.
+    #[serde(flatten)]
+    pub extras: BTreeMap<String, Any>,
+}
+
+impl<'de> Deserialize<'de> for Callback {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let fields = BTreeMap::<String, Any>::deserialize(deserializer)?;
+        let mut callback = Self {
+            data: BTreeMap::new(),
+            extras: BTreeMap::new(),
+        };
+        for (key, value) in fields {
+            // Extensions remain opaque even when their names contain braces.
+            if !key.starts_with("x-") && key.contains('{') {
+                callback.data.insert(
+                    key,
+                    serde_json::from_value(value).map_err(serde::de::Error::custom)?,
+                );
+            } else {
+                callback.extras.insert(key, value);
+            }
+        }
+        Ok(callback)
+    }
 }
 
 /// Example object.
@@ -512,6 +615,10 @@ pub struct Example {
     /// Embedded literal example.
     pub value: Option<Any>,
     pub external_value: Option<String>,
+    /// Unmodeled fields, including `x-*` extensions, retained as JSON values.
+    /// Do not duplicate fields with dedicated members in this map.
+    #[serde(flatten)]
+    pub extras: BTreeMap<String, Any>,
 }
 
 /// Represents a possible design-time link for a response.
@@ -522,7 +629,7 @@ pub struct Link {
     /// A relative or absolute URI reference to an OAS operation.
     pub operation_ref: Option<String>,
     /// The name of an existing, resolvable OAS operation
-    pub operation_id: String,
+    pub operation_id: Option<String>,
     /// A map representing parameters to pass to an operation.
     pub parameters: Option<BTreeMap<String, Any>>,
     /// A literal value or `{expression}` to use as a request body.
@@ -531,6 +638,10 @@ pub struct Link {
     pub description: Option<String>,
     /// A server object to be used by the target operation.
     pub server: Option<Server>,
+    /// Unmodeled fields, including `x-*` extensions, retained as JSON values.
+    /// Do not duplicate fields with dedicated members in this map.
+    #[serde(flatten)]
+    pub extras: BTreeMap<String, Any>,
 }
 
 /// Header object.
@@ -549,6 +660,10 @@ pub struct Header {
     pub example: Option<Any>,
     pub examples: Option<BTreeMap<String, Referenceable<Example>>>,
     pub content: Option<BTreeMap<String, MediaType>>,
+    /// Unmodeled fields, including `x-*` extensions, retained as JSON values.
+    /// Do not duplicate fields with dedicated members in this map.
+    #[serde(flatten)]
+    pub extras: BTreeMap<String, Any>,
 }
 
 /// Adds metadata to a single tag that is used by the `Operation` Object.
@@ -562,6 +677,10 @@ pub struct Tag {
     pub description: Option<String>,
     /// Additional external documentation for this tag.
     pub external_docs: Option<ExternalDocumentation>,
+    /// Unmodeled fields, including `x-*` extensions, retained as JSON values.
+    /// Do not duplicate fields with dedicated members in this map.
+    #[serde(flatten)]
+    pub extras: BTreeMap<String, Any>,
 }
 
 /// A simple object to allow referencing other components in the specification.

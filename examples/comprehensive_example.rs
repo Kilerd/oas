@@ -191,6 +191,7 @@ fn create_comprehensive_api() -> oas::OpenAPIV3 {
     
     // Create external documentation
     let external_docs = ExternalDocumentation {
+        extras: BTreeMap::new(),
         description: Some("Find more info here".to_string()),
         url: "https://example.com/docs".to_string(),
     };
