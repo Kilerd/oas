@@ -368,16 +368,8 @@ pub struct ExternalDocumentation {
     pub url: String,
 }
 
-/// The location of the parameter.
-#[skip_serializing_none]
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "lowercase")]
-pub enum ParameterIn {
-    Query,
-    Header,
-    Path,
-    Cookie,
-}
+// Preserve the published path while both model modules depend on the shared leaf.
+pub use crate::parameter_location::ParameterIn;
 
 /// Describes a single operation parameter.
 #[skip_serializing_none]

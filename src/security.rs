@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 use serde_with::skip_serializing_none;
 use std::collections::BTreeMap;
 
-use crate::types::ParameterIn;
+use crate::parameter_location::ParameterIn;
 
 /// The type of the security scheme.
 #[skip_serializing_none]
@@ -31,7 +31,7 @@ pub enum SecurityType {
     },
     Oauth2 {
         /// An object containing configuration information for the flow types supported.
-        flows: OauthFlows,
+        flows: Box<OauthFlows>,
     },
     OpenIdConnect {
         /// OpenId Connect URL to discover OAuth2 configuration values.
@@ -87,4 +87,40 @@ pub struct OauthFlow {
 pub struct SecurityRequirement {
     #[serde(flatten)]
     pub data: BTreeMap<String, Vec<String>>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn oauth_authorization_code_preserves_wire_format() {
+        let scheme = SecurityScheme {
+            _type: SecurityType::Oauth2 {
+                flows: Box::new(OauthFlows {
+                    implicit: None,
+                    password: None,
+                    client_credentials: None,
+                    authorization_code: Some(OauthFlow {
+                        authorization_url: "https://example.com/oauth/authorize".into(),
+                        token_url: Some("https://example.com/oauth/token".into()),
+                        refresh_url: Some("https://example.com/oauth/refresh".into()),
+                        scopes: BTreeMap::from([
+                            ("read:items".into(), "Read items".into()),
+                            ("write:items".into(), "Write items".into()),
+                        ]),
+                    }),
+                }),
+            },
+            description: Some("OAuth authorization code".into()),
+        };
+        let expected = concat!(
+            r#"{"type":"oauth2","flows":{"authorizationCode":{"authorizationUrl":"https://example.com/oauth/authorize","#,
+            r#""tokenUrl":"https://example.com/oauth/token","refreshUrl":"https://example.com/oauth/refresh","#,
+            r#""scopes":{"read:items":"Read items","write:items":"Write items"}}},"description":"OAuth authorization code"}"#,
+        );
+        assert_eq!(serde_json::to_string(&scheme).unwrap(), expected);
+        let decoded: SecurityScheme = serde_json::from_str(expected).unwrap();
+        assert_eq!(serde_json::to_string(&decoded).unwrap(), expected);
+    }
 }

@@ -573,12 +573,10 @@ impl Tag {
         }
     }
 
-    pub fn with_description(name: impl Into<String>, description: impl Into<String>) -> Tag {
-        Self {
-            name: name.into(),
-            description: Some(description.into()),
-            external_docs: None,
-        }
+    /// Set the description while retaining the tag's name and external documentation.
+    pub fn with_description(mut self, description: impl Into<String>) -> Self {
+        self.description = Some(description.into());
+        self
     }
 }
 
@@ -787,4 +785,30 @@ impl_serde_json! {
     Operation, ExternalDocumentation, ParameterIn, Parameter, RequestBody, MediaType,
     Encoding, Responses, Response, Callback, Example, Link, Header, Tag, Reference,
     Schema, Discriminator,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Description builders must edit the existing tag instead of reconstructing its metadata.
+    #[test]
+    fn tag_description_builder_preserves_existing_fields_and_constructor_bytes() {
+        let described = Tag::simple("pets").with_description("Pet operations");
+        assert_eq!(
+            serde_json::to_string(&described).unwrap(),
+            r#"{"name":"pets","description":"Pet operations"}"#,
+            "the migrated constructor must preserve wire bytes, otherwise an API-only migration changes documents"
+        );
+        let mut tag = Tag::new("pets", Some("Old description"));
+        tag.external_docs = Some(ExternalDocumentation {
+            description: Some("Guide".into()),
+            url: "https://example.com/guide".into(),
+        });
+        assert_eq!(
+            serde_json::to_string(&tag.with_description("Updated")).unwrap(),
+            r#"{"name":"pets","description":"Updated","externalDocs":{"description":"Guide","url":"https://example.com/guide"}}"#,
+            "changing the description must retain the name and docs, otherwise the builder discards caller metadata"
+        );
+    }
 }

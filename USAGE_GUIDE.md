@@ -349,8 +349,8 @@ Group related operations with tags:
 
 ```rust
 let api = builders::api("My API", "1.0.0")
-    .add_tag(Tag::with_description("users", "User management"))
-    .add_tag(Tag::with_description("auth", "Authentication"))
+    .add_tag(Tag::simple("users").with_description("User management"))
+    .add_tag(Tag::simple("auth").with_description("Authentication"))
     .add_path("/users", PathItem::new()
         .with_get(builders::get("List users").tag("users").build()))
     .add_path("/auth/login", PathItem::new()
