@@ -581,21 +581,11 @@ impl Tag {
     }
 
     pub fn simple(name: impl Into<String>) -> Tag {
-        Self {
-            extras: BTreeMap::new(),
-            name: name.into(),
-            description: None,
-            external_docs: None,
-        }
+        Self::new(name, None::<String>)
     }
 
     pub fn with_description(name: impl Into<String>, description: impl Into<String>) -> Tag {
-        Self {
-            extras: BTreeMap::new(),
-            name: name.into(),
-            description: Some(description.into()),
-            external_docs: None,
-        }
+        Self::new(name, Some(description))
     }
 }
 

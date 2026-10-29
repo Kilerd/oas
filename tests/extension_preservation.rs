@@ -1,6 +1,7 @@
 use oas::{builders, OpenAPIV3, Operation, Referenceable, Response, Responses};
 use serde_json::json;
 
+/// Regression: editing a typed summary used to drop operation and response extensions.
 #[test]
 fn typed_summary_edit_and_operation_deletion_preserve_extensions() {
     let input = json!({
@@ -35,33 +36,14 @@ fn typed_summary_edit_and_operation_deletion_preserve_extensions() {
             "x-schema": [true, null]
         }}}
     });
-    let expected = json!({
-        "openapi": "3.1.0",
-        "info": {"title": "Example", "version": "1"},
-        "x-document": {"source": "catalog"},
-        "paths": {"/items": {"get": {
-            "summary": "after",
-            "x-audience": "internal",
-            "x-routing": {"enabled": true, "weight": 1.5, "fallback": null},
-            "responses": {"200": {
-                "description": "ok",
-                "x-owner": "catalog",
-                "x-labels": ["stable", 2, false, null],
-                "x-empty": {},
-                "content": {"application/json": {"schema": {
-                    "type": ["string", "null"],
-                    "x-schema": {"sensitive": false}
-                }}}
-            }}
-        }}},
-        "components": {"schemas": {"Item": {
-            "$ref": "other.json#/$defs/Item",
-            "description": "Referenced item",
-            "x-schema": [true, null]
-        }}}
-    });
+    let mut doc: OpenAPIV3 = serde_json::from_value(input.clone()).unwrap();
+    let mut expected = input;
+    expected["paths"]["/items"]["get"]["summary"] = json!("after");
+    expected["paths"]["/items"]
+        .as_object_mut()
+        .unwrap()
+        .remove("post");
 
-    let mut doc: OpenAPIV3 = serde_json::from_value(input).unwrap();
     let path = doc.paths.get_mut("/items").unwrap();
     path.get.as_mut().unwrap().summary = Some("after".into());
     path.post = None;
@@ -69,7 +51,8 @@ fn typed_summary_edit_and_operation_deletion_preserve_extensions() {
     let output = serde_json::to_string(&doc).unwrap();
     assert_eq!(
         serde_json::from_str::<serde_json::Value>(&output).unwrap(),
-        expected
+        expected,
+        "must preserve all other JSON fields and remove POST, otherwise typed edits lose metadata or restore deleted operations"
     );
 }
 
@@ -125,6 +108,7 @@ fn constructors_and_builders_do_not_emit_empty_extras() {
     );
 }
 
+/// Regression: the sample-app document lost Components metadata during typed readback.
 #[test]
 fn components_metadata_survives_typed_readback_and_schema_deletion() {
     let input = json!({
@@ -150,7 +134,11 @@ fn components_metadata_survives_typed_readback_and_schema_deletion() {
         json!({})
     );
     let mut doc: OpenAPIV3 = serde_json::from_value(input.clone()).unwrap();
-    assert_eq!(serde_json::to_value(&doc).unwrap(), input);
+    assert_eq!(
+        serde_json::to_value(&doc).unwrap(),
+        input,
+        "must retain the complete input on readback, otherwise typed parsing silently discards component metadata"
+    );
     doc.components
         .as_mut()
         .unwrap()
@@ -158,21 +146,14 @@ fn components_metadata_survives_typed_readback_and_schema_deletion() {
         .as_mut()
         .unwrap()
         .remove("Retired");
+    let mut expected = input;
+    expected["components"]["schemas"]
+        .as_object_mut()
+        .unwrap()
+        .remove("Retired");
     assert_eq!(
         serde_json::to_value(doc).unwrap(),
-        json!({
-            "openapi": "3.1.0",
-            "info": {"title": "Sample", "version": "1"},
-            "paths": {},
-            "components": {
-                "schemas": {},
-                "x-business-metadata": {
-                    "source": "repository-sample-app",
-                    "literal": {"$ref": "ordinary metadata"},
-                    "sequence": [2, 1]
-                },
-                "vendorMetadata": {"enabled": false, "value": null}
-            }
-        })
+        expected,
+        "must retain container metadata while removing Retired, otherwise component edits lose metadata or restore deleted schemas"
     );
 }
