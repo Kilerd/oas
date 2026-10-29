@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.0-dev] - 2026-10-29
+
+### Added
+- Retained-object metadata preservation, typed reusable Path Items, and explicit-null payload preservation during typed edits.
+- Non-schema Reference Object annotations and unknown siblings, with lossless conversion into schema fields where possible.
+- Metadata retention on security schemes and OAuth flows, including password and client credentials flows without an authorization URL.
+
+### Changed
+- Complete object and reference literals require the new metadata fields; `Link.operation_id` and `OauthFlow.authorization_url` are optional.
+- `SecurityType::Oauth2` stores boxed flows. `Tag::with_description` is a consuming builder that retains existing metadata.
+- Security serialization gives current typed fields precedence over colliding retained metadata.
+- Formatting and warning-free Clippy checks apply across all targets.
+
+See [MIGRATION.md](MIGRATION.md) for source migration details and remaining model limitations. This is a prerelease; it does not add document validation or reference resolution.
+
 ## [0.3.0] - 2026-09-14
 
 ### Added

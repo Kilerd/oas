@@ -4,30 +4,32 @@
 [![Documentation](https://docs.rs/oas/badge.svg)](https://docs.rs/oas)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-Rust OpenAPI models with Serde serialization and builders for constructing API
-descriptions. [Version 0.3.0](https://crates.io/crates/oas/0.3.0) adds schema type
+Rust OpenAPI models with Serde serialization and builders for constructing and
+editing API descriptions. The `1.0.0-dev` prerelease preserves retained-object
+metadata and reference annotations during typed edits. It includes schema type
 unions, boolean schemas, references with sibling keywords, and OpenAPI 3.2
 streaming media types, including Server-Sent Events (SSE).
 
 Existing document constructors still default to **OpenAPI 3.0.0**. Coverage of
 **OpenAPI 3.1/3.2 is partial**; the crate represents documents and schemas without
 validating them or resolving references. See the
-[migration guide](https://github.com/Kilerd/oas/blob/main/MIGRATION.md) for API
+[migration guide](MIGRATION.md) for API
 changes and remaining model differences.
 
 ## Installation
 
 ```toml
 [dependencies]
-oas = "0.3"
+oas = "=1.0.0-dev"
 serde_json = "1"
 ```
 
-Upgrading from 0.1 or 0.2 requires an explicit dependency update. In 0.3,
-schema-bearing fields use `SchemaValue`, and `Schema._type` uses `SchemaType`.
-Existing schema helper constructors remain usable with builders. See the
-[0.3.0 changelog](https://github.com/Kilerd/oas/blob/main/CHANGELOG.md#030---2026-09-14)
-and [Rust API migration](https://github.com/Kilerd/oas/blob/main/MIGRATION.md#rust-api-migration).
+This prerelease introduces Rust source changes: retained objects and references
+gain metadata fields, Link operation IDs and OAuth authorization URLs become
+optional, OAuth flow storage is boxed, and `Tag::with_description` edits an
+existing tag. Complete struct literals need adaptation. See the
+[1.0.0-dev changelog](CHANGELOG.md#100-dev---2026-10-29) and
+[Rust API migration](MIGRATION.md).
 
 ## Quick start
 
@@ -200,7 +202,7 @@ round trip for unsupported fields.
 
 ## More examples and documentation
 
-- [API reference for 0.3.0](https://docs.rs/oas/0.3.0/oas/)
+- [API reference for 1.0.0-dev](https://docs.rs/oas/1.0.0-dev/oas/)
 - [Usage guide](https://github.com/Kilerd/oas/blob/main/USAGE_GUIDE.md) for builders, operations, parameters, and reusable components
 - [Basic builder example](https://github.com/Kilerd/oas/blob/main/examples/easy_usage.rs)
 - [Complete API example](https://github.com/Kilerd/oas/blob/main/examples/comprehensive_example.rs)
