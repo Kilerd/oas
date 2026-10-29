@@ -29,6 +29,33 @@ fn all_oauth_flows_round_trip_applicable_urls() {
     }
 }
 
+/// Regression: a field retained from the old variant collided with the new variant's own field.
+#[test]
+fn variant_replacement_drops_retained_fields_of_the_replacement_variant() {
+    let input = json!({
+        "type": "apiKey", "name": "X-API-Key", "in": "header",
+        "scheme": "stale", "bearerFormat": "stale", "x-scheme": "kept"
+    });
+    let mut scheme: SecurityScheme = serde_json::from_value(input).unwrap();
+    scheme._type = SecurityType::Http {
+        scheme: "bearer".into(),
+        bearer_format: None,
+    };
+
+    let wire = serde_json::to_string(&scheme).unwrap();
+    assert_eq!(
+        wire,
+        r#"{"type":"http","scheme":"bearer","x-scheme":"kept"}"#,
+        "must emit the replacement variant field once and drop the retained original, otherwise documents contain duplicate keys"
+    );
+    assert_eq!(
+        serde_json::to_value(&scheme).unwrap(),
+        json!({
+            "type": "http", "scheme": "bearer", "x-scheme": "kept"
+        })
+    );
+}
+
 /// Regression: typed security readback dropped scheme, flow-container, and flow metadata.
 #[test]
 fn security_metadata_survives_round_trip_and_typed_edits() {

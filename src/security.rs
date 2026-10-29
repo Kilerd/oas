@@ -41,16 +41,53 @@ pub enum SecurityType {
 }
 
 /// Defines a security scheme that can be used by the operations.
-#[skip_serializing_none]
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone)]
 pub struct SecurityScheme {
-    #[serde(flatten)]
     pub _type: SecurityType,
     /// A short description for security scheme.
     pub description: Option<String>,
     /// Extension fields and other unmodeled properties.
-    #[serde(flatten)]
     pub extras: BTreeMap<String, serde_json::Value>,
+}
+
+/// Fields the active variant serializes, which therefore must not also come from `extras`.
+fn modeled_fields(scheme: &SecurityType) -> &'static [&'static str] {
+    match scheme {
+        SecurityType::ApiKey { .. } => &["type", "name", "in"],
+        SecurityType::Http { .. } => &["type", "scheme", "bearerFormat"],
+        SecurityType::Oauth2 { .. } => &["type", "flows"],
+        SecurityType::OpenIdConnect { .. } => &["type", "openIdConnectUrl"],
+    }
+}
+
+impl Serialize for SecurityScheme {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        #[derive(Serialize)]
+        struct Fields<'a> {
+            #[serde(flatten)]
+            _type: &'a SecurityType,
+            #[serde(skip_serializing_if = "Option::is_none")]
+            description: &'a Option<String>,
+            #[serde(flatten)]
+            extras: BTreeMap<&'a str, &'a serde_json::Value>,
+        }
+
+        // A variant change can leave fields of the new variant in `extras`.
+        // Emitting both owners would duplicate JSON keys, so the typed value wins.
+        let modeled = modeled_fields(&self._type);
+        let extras = self
+            .extras
+            .iter()
+            .filter(|(key, _)| key.as_str() != "description" && !modeled.contains(&key.as_str()))
+            .map(|(key, value)| (key.as_str(), value))
+            .collect();
+        Fields {
+            _type: &self._type,
+            description: &self.description,
+            extras,
+        }
+        .serialize(serializer)
+    }
 }
 
 impl<'de> Deserialize<'de> for SecurityScheme {
@@ -71,13 +108,7 @@ impl<'de> Deserialize<'de> for SecurityScheme {
         } = Fields::deserialize(deserializer)?;
         // A flattened internally tagged enum leaves its fields available to the
         // flattened map. Keep one owner so typed edits cannot emit stale values.
-        let modeled_fields: &[&str] = match &_type {
-            SecurityType::ApiKey { .. } => &["type", "name", "in"],
-            SecurityType::Http { .. } => &["type", "scheme", "bearerFormat"],
-            SecurityType::Oauth2 { .. } => &["type", "flows"],
-            SecurityType::OpenIdConnect { .. } => &["type", "openIdConnectUrl"],
-        };
-        for field in modeled_fields {
+        for field in modeled_fields(&_type) {
             extras.remove(*field);
         }
         Ok(Self {
