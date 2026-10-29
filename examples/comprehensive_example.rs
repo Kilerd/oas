@@ -128,6 +128,7 @@ fn create_comprehensive_api() -> oas::OpenAPIV3 {
     
     security_schemes.insert("bearerAuth".to_string(), Referenceable::data(
         SecurityScheme {
+            extras: BTreeMap::new(),
             _type: SecurityType::Http {
                 scheme: "bearer".to_string(),
                 bearer_format: Some("JWT".to_string()),
@@ -138,6 +139,7 @@ fn create_comprehensive_api() -> oas::OpenAPIV3 {
     
     security_schemes.insert("apiKey".to_string(), Referenceable::data(
         SecurityScheme {
+            extras: BTreeMap::new(),
             _type: SecurityType::ApiKey {
                 name: "X-API-Key".to_string(),
                 _in: ParameterIn::Header,

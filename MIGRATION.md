@@ -104,7 +104,8 @@ The following objects retain unmodeled fields in public
 - `Info`, `Contact`, `License`, `Server`, `ServerVariable`, and `Tag`;
 - `PathItem`, `Operation`, `ExternalDocumentation`, and `Parameter`;
 - `RequestBody`, `MediaType`, `Encoding`, `Response`, `Header`, `Link`, and `Example`;
-- `Components`, `Responses`, and `Callback` containers.
+- `Components`, `Responses`, and `Callback` containers;
+- `SecurityScheme`, `OauthFlows`, and `OauthFlow`.
 
 This includes `x-*` extensions and unknown fields without that prefix; retention
 does not make them valid OpenAPI fields.
@@ -124,6 +125,12 @@ OpenAPI 3.1 path items for typed edits; values formerly stored under
 `Link.operation_id` is now `Option<String>`: wrap existing values in `Some(...)`;
 use `None` for `operationRef` or documentation-only links. This allows retention
 without enforcing link validity or the mutual exclusion of its operation fields.
+`OauthFlow.authorization_url` is now `Option<String>`: wrap existing URLs in
+`Some(...)`, and use `None` for password and client credentials flows. Implicit
+flows use `authorizationUrl`; password and client credentials use `tokenUrl`;
+authorization code uses both. The shared flow model preserves these shapes
+without enforcing flow-specific URL requirements. Complete security scheme,
+flow-container, and flow literals also need `extras: BTreeMap::new()`.
 Struct update syntax can instead reuse an existing constructor, where available:
 
 ```rust
@@ -161,9 +168,8 @@ across these maps can produce duplicate JSON fields.
 
 These extras maps retain unmodeled object fields; they do not determine
 `Referenceable<T>` variant selection or reference semantics. Retention is still
-limited: security schemes/OAuth flows and standalone Discriminator/XML objects
-lack extras maps; the root `paths` map does not support arbitrary container
-metadata. Optional JSON payloads (`Parameter.example`, `Header.example`,
+limited: standalone Discriminator/XML objects lack extras maps; the root `paths`
+map does not support arbitrary container metadata. Optional JSON payloads (`Parameter.example`, `Header.example`,
 `MediaType.example`, `Example.value`, and `Link.request_body`) preserve explicit
 null as `Some(serde_json::Value::Null)`; missing fields deserialize to `None`.
 Setting these typed members to `None` removes them from serialized output. Their
@@ -182,7 +188,7 @@ lossless round trip outside the supported subset.
 | --- | --- |
 | 3.1 document structure | Optional `paths`, typed `webhooks` and `jsonSchemaDialect`. Root `extras` retains unknown fields, but `paths` is still required. |
 | 3.1 metadata/references | `Info.summary`, `License.identifier`, non-schema Reference Object `summary` / `description`. The existing generic `Referenceable<T>` parser can treat references to all-optional objects (e.g. headers) as inline data; the new schema positions avoid that wrapper. |
-| 3.1 security | `mutualTLS`; audit OAuth flow required fields (the legacy model requires `authorizationUrl` for every flow). |
+| 3.1 security | `mutualTLS`; flow-specific URL requirements are not validated. |
 | 3.1 operations/links | Optional operation `responses`; Link operation-field mutual exclusion is not validated. |
 | 3.2 paths/parameters | `query`, `additionalOperations`, `in: querystring`. |
 | 3.2 media/encoding | Reusable `Components.mediaTypes` and references in content maps; `prefixEncoding`, `itemEncoding`, and nested encoding fields. |
