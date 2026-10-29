@@ -3,6 +3,7 @@ use oas::{
 };
 use serde_json::json;
 
+/// Optional inline fields previously allowed pure references to deserialize as empty objects.
 #[test]
 fn document_preserves_header_and_example_references() {
     let document = json!({
@@ -23,7 +24,10 @@ fn document_preserves_header_and_example_references() {
         }
     });
     let api: OpenAPIV3 = serde_json::from_value(document.clone()).unwrap();
-    assert_eq!(serde_json::to_value(&api).unwrap(), document);
+    assert_eq!(
+        serde_json::to_value(&api).unwrap(), document,
+        "document references must round-trip intact, otherwise typed editing changes their targets or annotations"
+    );
     let response = api.paths["/items"].get.as_ref().unwrap().responses.data["200"]
         .as_data()
         .unwrap();
@@ -35,6 +39,7 @@ fn document_preserves_header_and_example_references() {
         .is_reference());
 }
 
+/// A reference description also matches an inline Response field and must not hide its target.
 #[test]
 fn document_preserves_response_reference_annotations() {
     let document = json!({
@@ -51,12 +56,16 @@ fn document_preserves_response_reference_annotations() {
         "components": {"responses": {"Error": {"description": "An error"}}}
     });
     let api: OpenAPIV3 = serde_json::from_value(document.clone()).unwrap();
-    assert_eq!(serde_json::to_value(&api).unwrap(), document);
+    assert_eq!(
+        serde_json::to_value(&api).unwrap(), document,
+        "document references must round-trip intact, otherwise typed editing changes their targets or annotations"
+    );
     let responses = &api.paths["/items"].get.as_ref().unwrap().responses;
     assert!(responses.data["400"].is_reference());
     assert!(responses.data["500"].is_reference());
 }
 
+/// Extra reference properties previously either rejected the document or disappeared on output.
 #[test]
 fn document_preserves_parameter_reference_unknown_properties() {
     let input = json!({
@@ -93,10 +102,12 @@ fn document_preserves_parameter_reference_unknown_properties() {
             "description": "The selected item",
             "x-note": true,
             "unrecognized": {"nested": [1, false]}
-        })
+        }),
+        "reference siblings must survive nested document parsing, otherwise editing loses unmodeled content"
     );
 }
 
+/// The consumer lost x-public while editing a response reference through the typed model.
 #[test]
 fn response_reference_retains_consumer_siblings() {
     let input = json!({
@@ -108,9 +119,14 @@ fn response_reference_retains_consumer_siblings() {
     });
     let reference: Referenceable<Response> = serde_json::from_value(input.clone()).unwrap();
     assert!(reference.is_reference());
-    assert_eq!(serde_json::to_value(reference).unwrap(), input);
+    assert_eq!(
+        serde_json::to_value(reference).unwrap(),
+        input,
+        "reference editing must retain every sibling, otherwise consumer metadata is silently lost"
+    );
 }
 
+/// Schema-bearing builders previously dropped reference annotations and unknown siblings.
 #[test]
 fn reference_metadata_survives_conversion_to_schema_fields() {
     let reference: Reference = serde_json::from_value(json!({
@@ -132,33 +148,94 @@ fn reference_metadata_survives_conversion_to_schema_fields() {
                 "x-public": {"$ref": "literal", "order": [2, 1]},
                 "unrecognized": false
             }
-        })
+        }),
+        "schema-bearing builders must retain reference metadata, otherwise conversion loses source fields"
     );
 }
 
+/// Reference siblings that are schema keywords must support ordinary typed edits.
+#[test]
+fn converted_reference_schema_fields_behave_like_direct_schema_fields() {
+    let input = json!({
+        "$ref": "#/components/schemas/Message",
+        "type": "string",
+        "format": "byte",
+        "contentSchema": {"type": "object", "x-note": true},
+        "x-public": {"order": [2, 1]}
+    });
+    let reference: Reference = serde_json::from_value(input.clone()).unwrap();
+    let mut converted: SchemaValue = reference.into();
+    let mut direct: SchemaValue = serde_json::from_value(input).unwrap();
+    let schema = converted.as_object().unwrap();
+    assert!(
+        schema._type.is_some() && schema.format.is_some() && schema.content_schema.is_some(),
+        "schema keywords must populate typed fields, otherwise ordinary edits compete with extras"
+    );
+    for value in [&mut converted, &mut direct] {
+        let schema = value.as_object_mut().unwrap();
+        schema._type = Some("object".into());
+        schema.format = Some("custom".into());
+        schema.content_schema = Some(Box::new(false.into()));
+    }
+    let expected = json!({
+        "$ref": "#/components/schemas/Message",
+        "type": "object",
+        "format": "custom",
+        "contentSchema": false,
+        "x-public": {"order": [2, 1]}
+    });
+    for value in [converted, direct] {
+        assert_eq!(serde_json::to_value(value).unwrap(), expected);
+    }
+}
+
+/// Reference Object siblings are arbitrary values, even when named like schema fields.
+#[test]
+fn schema_conversion_preserves_reference_siblings_that_cannot_be_promoted_losslessly() {
+    for sibling in [json!(null), json!({"label": "application metadata"})] {
+        let input = json!({
+            "$ref": "#/components/schemas/Message",
+            "format": sibling,
+            "x-public": {"order": [2, 1]}
+        });
+        let reference: Reference = serde_json::from_value(input.clone()).unwrap();
+        let converted: SchemaValue = reference.into();
+        assert_eq!(
+            serde_json::to_value(converted).unwrap(),
+            input,
+            "infallible conversion must retain arbitrary reference siblings, otherwise editing loses source content"
+        );
+    }
+}
+
+/// Adding reference metadata must not change existing constructors' serialized bytes.
 #[test]
 fn constructors_keep_pure_reference_wire_format() {
-    assert_eq!(
-        serde_json::to_value(Reference::new("#/components/headers/RequestId")).unwrap(),
-        json!({"$ref": "#/components/headers/RequestId"})
-    );
     let reference: Referenceable<Header> =
         Referenceable::reference("#/components/headers/RequestId");
-    assert_eq!(
-        serde_json::to_value(reference).unwrap(),
-        json!({
-            "$ref": "#/components/headers/RequestId"
-        })
-    );
-    let reference: Referenceable<Response> = Referenceable::component_ref("responses", "Error");
-    assert_eq!(
-        serde_json::to_value(reference).unwrap(),
-        json!({
-            "$ref": "#/components/responses/Error"
-        })
-    );
+    let component: Referenceable<Response> = Referenceable::component_ref("responses", "Error");
+    for (serialized, expected) in [
+        (
+            serde_json::to_string(&Reference::new("#/components/headers/RequestId")).unwrap(),
+            r##"{"$ref":"#/components/headers/RequestId"}"##,
+        ),
+        (
+            serde_json::to_string(&reference).unwrap(),
+            r##"{"$ref":"#/components/headers/RequestId"}"##,
+        ),
+        (
+            serde_json::to_string(&component).unwrap(),
+            r##"{"$ref":"#/components/responses/Error"}"##,
+        ),
+    ] {
+        assert_eq!(
+            serialized, expected,
+            "pure reference constructors must retain their bytes, otherwise metadata additions change existing output"
+        );
+    }
 }
 
+/// Permissive reference-first matching would reclassify schemas and application payloads.
 #[test]
 fn schema_and_inline_siblings_are_not_discarded_by_reference_matching() {
     let schema = json!({
@@ -169,7 +246,10 @@ fn schema_and_inline_siblings_are_not_discarded_by_reference_matching() {
         "required": ["id"]
     });
     let legacy: Referenceable<Schema> = serde_json::from_value(schema.clone()).unwrap();
-    assert!(legacy.is_data());
+    assert!(
+        legacy.is_data(),
+        "schema siblings must remain inline data, otherwise typed schema access changes meaning"
+    );
     assert_eq!(serde_json::to_value(legacy).unwrap(), schema);
     let modern: SchemaValue = serde_json::from_value(schema.clone()).unwrap();
     assert_eq!(serde_json::to_value(modern).unwrap(), schema);
@@ -192,6 +272,7 @@ fn schema_and_inline_siblings_are_not_discarded_by_reference_matching() {
     );
 }
 
+/// Reference parsing must remain usable with Serde inputs other than JSON text.
 #[test]
 fn reference_shape_is_supported_by_non_json_deserializers() {
     use serde::de::value::{Error, MapDeserializer};
@@ -204,11 +285,15 @@ fn reference_shape_is_supported_by_non_json_deserializers() {
     let deserializer = MapDeserializer::<_, Error>::new(fields.into_iter());
     let reference = Referenceable::<Response>::deserialize(deserializer).unwrap();
     let reference = reference.as_reference().unwrap();
-    assert_eq!(reference._ref, "#/components/responses/Error");
+    assert_eq!(
+        reference._ref, "#/components/responses/Error",
+        "Serde map inputs must retain reference targets, otherwise parsing becomes JSON-only"
+    );
     assert_eq!(reference.summary.as_deref(), Some("Failure"));
     assert_eq!(reference.description.as_deref(), Some("Endpoint failure"));
 }
 
+/// Whole-Value buffering previously broke borrowed, Deserialize-only generic payloads.
 #[test]
 fn generic_inline_data_still_borrows_from_input() {
     #[derive(serde::Deserialize)]
@@ -217,5 +302,5 @@ fn generic_inline_data_still_borrows_from_input() {
     }
     let value: Referenceable<Borrowed<'_>> =
         serde_json::from_str(r#"{"value":"borrowed"}"#).unwrap();
-    assert_eq!(value.as_data().unwrap().value, "borrowed");
+    assert_eq!(value.as_data().unwrap().value, "borrowed", "generic inline data must borrow from its input, otherwise existing Deserialize-only callers break");
 }

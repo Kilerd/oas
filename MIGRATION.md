@@ -85,6 +85,15 @@ shape now selects `Reference` rather than `Data`; schema objects with additional
 keywords still select `Data`. Converting either variant into `SchemaValue` retains
 its fields. Use `SchemaValue` directly when inspecting schema objects.
 
+`From<Reference> for SchemaValue` uses the existing Schema deserializer to promote
+siblings such as `type`, `format`, and `contentSchema` into typed fields when their
+JSON values round-trip unchanged. This lets ordinary typed edits behave like a
+direct schema read. Reference siblings need not be valid schema values: if parsing
+fails or would change a value (for example, omit `format: null`), the infallible
+conversion retains all siblings in `extras` instead. That fallback preserves
+content but does not normalize schema fields; callers should inspect the retained
+extras before typed edits to the same keys.
+
 This parsing rule does not validate documents or resolve references. Malformed
 reference candidates may still fall back to `Data(T)`; objects with additional
 fields follow that inline type's existing handling of unknown fields. The new

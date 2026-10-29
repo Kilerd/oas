@@ -709,9 +709,18 @@ impl From<bool> for SchemaValue {
 
 impl From<Reference> for SchemaValue {
     fn from(reference: Reference) -> Self {
-        let mut schema = Schema::reference(reference._ref);
+        // Promote schema fields only when their wire values survive unchanged;
+        // otherwise this infallible conversion must retain arbitrary siblings.
+        let siblings = Any::Object(reference.extras.clone().into_iter().collect());
+        let mut schema = Schema::deserialize(&siblings)
+            .ok()
+            .filter(|schema| serde_json::to_value(schema).ok().as_ref() == Some(&siblings))
+            .unwrap_or_else(|| Schema {
+                extras: reference.extras,
+                ..Schema::default()
+            });
+        schema._ref = Some(reference._ref);
         schema.description = reference.description;
-        schema.extras = reference.extras;
         if let Some(summary) = reference.summary {
             schema.extras.insert("summary".into(), summary.into());
         }
