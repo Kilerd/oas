@@ -24,6 +24,15 @@ coverage. The remaining differences are listed below.
   unchanged 0.2 API should remain on `oas = "0.2"`.
   [Version 0.3.0](https://crates.io/crates/oas/0.3.0) was published on 2026-09-14.
 
+## Unreleased Tag builder change
+
+`Tag::with_description` now consumes an existing tag, matching the other
+`with_*` builders. Replace `Tag::with_description(name, description)` with
+`Tag::simple(name).with_description(description)`. The two-argument
+`Tag::new(name, Some(description))` constructor remains available. This is a Rust
+source change; serialized tags keep the same fields and values. Updating an
+existing tag's description preserves its name and external documentation.
+
 ## Rust API migration
 
 `Schema` remains the object form, with `extras` retaining unmodeled keywords and

@@ -6,7 +6,7 @@ fn main() {
         .with_description("A sample Pet Store API")
         .add_server(Server::new("https://api.petstore.com")
             .with_description("Production server"))
-        .add_tag(Tag::with_description("pets", "Pet operations"))
+        .add_tag(Tag::simple("pets").with_description("Pet operations"))
         .add_path("/pets", PathItem::new()
             .with_get(builders::get("List all pets")
                 .tag("pets")

@@ -185,8 +185,8 @@ fn create_comprehensive_api() -> oas::OpenAPIV3 {
     
     // Create tags
     let tags = vec![
-        Tag::with_description("users", "User management operations"),
-        Tag::with_description("auth", "Authentication operations"),
+        Tag::simple("users").with_description("User management operations"),
+        Tag::simple("auth").with_description("Authentication operations"),
     ];
     
     // Create external documentation
