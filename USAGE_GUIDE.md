@@ -185,20 +185,14 @@ use std::collections::BTreeMap;
 let mut schemas = BTreeMap::new();
 
 // User schema
-let mut user_properties = BTreeMap::new();
-user_properties.insert("properties".to_string(), serde_json::json!({
-    "id": {"type": "integer", "format": "int64"},
-    "name": {"type": "string"},
-    "email": {"type": "string", "format": "email"}
-}));
-user_properties.insert("required".to_string(), serde_json::json!(["id", "name", "email"]));
-
 schemas.insert("User".to_string(), Referenceable::data(Schema {
-    _type: Some("object".into()),
-    description: Some("A user object".to_string()),
-    extras: user_properties,
-    format: None,
-    ..Schema::default()
+    properties: Some(BTreeMap::from([
+        ("id".into(), Schema::integer().with_format("int64").into()),
+        ("name".into(), Schema::string().into()),
+        ("email".into(), Schema::string().with_format("email").into()),
+    ])),
+    required: Some(vec!["id".into(), "name".into(), "email".into()]),
+    ..Schema::object().with_description("A user object")
 }));
 
 // Error schema
