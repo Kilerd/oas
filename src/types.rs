@@ -8,6 +8,8 @@ use serde::{Deserialize, Serialize};
 use serde_with::skip_serializing_none;
 use std::collections::BTreeMap;
 
+pub use crate::schema::SchemaCount;
+
 /// Type alias for arbitrary JSON values.
 pub type Any = serde_json::Value;
 
@@ -670,11 +672,11 @@ impl From<Referenceable<Schema>> for SchemaValue {
 
 /// A schema object defining input and output data types.
 ///
-/// Use [`SchemaValue`] where a schema may also be a boolean. Keywords without
-/// dedicated fields (including nested schemas) are preserved verbatim in `extras`.
+/// Use [`SchemaValue`] where a schema may also be a boolean. Structural keywords
+/// have typed fields; unknown vocabulary and literal payloads remain in `extras`.
 /// This is a representation, not a JSON Schema validator or reference resolver.
 #[skip_serializing_none]
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Schema {
     #[serde(rename = "type")]
@@ -692,8 +694,76 @@ pub struct Schema {
     pub content_encoding: Option<String>,
     /// Schema describing decoded string content. Does not change the wire type.
     pub content_schema: Option<Box<SchemaValue>>,
+    #[serde(default, deserialize_with = "crate::schema::present")]
+    pub properties: Option<BTreeMap<String, SchemaValue>>,
+    #[serde(default, deserialize_with = "crate::schema::present")]
+    pub pattern_properties: Option<BTreeMap<String, SchemaValue>>,
+    #[serde(default, deserialize_with = "crate::schema::present")]
+    pub required: Option<Vec<String>>,
+    #[serde(default, deserialize_with = "crate::schema::present")]
+    pub min_properties: Option<SchemaCount>,
+    #[serde(default, deserialize_with = "crate::schema::present")]
+    pub max_properties: Option<SchemaCount>,
+    #[serde(default, deserialize_with = "crate::schema::present")]
+    pub additional_properties: Option<Box<SchemaValue>>,
+    #[serde(default, deserialize_with = "crate::schema::present")]
+    pub unevaluated_properties: Option<Box<SchemaValue>>,
+    #[serde(default, deserialize_with = "crate::schema::present")]
+    pub property_names: Option<Box<SchemaValue>>,
+    #[serde(default, deserialize_with = "crate::schema::present")]
+    pub all_of: Option<Vec<SchemaValue>>,
+    #[serde(default, deserialize_with = "crate::schema::present")]
+    pub any_of: Option<Vec<SchemaValue>>,
+    #[serde(default, deserialize_with = "crate::schema::present")]
+    pub one_of: Option<Vec<SchemaValue>>,
+    #[serde(default, deserialize_with = "crate::schema::present")]
+    pub not: Option<Box<SchemaValue>>,
+    #[serde(rename = "if", default, deserialize_with = "crate::schema::present")]
+    pub if_schema: Option<Box<SchemaValue>>,
+    #[serde(rename = "then", default, deserialize_with = "crate::schema::present")]
+    pub then_schema: Option<Box<SchemaValue>>,
+    #[serde(rename = "else", default, deserialize_with = "crate::schema::present")]
+    pub else_schema: Option<Box<SchemaValue>>,
+    #[serde(default, deserialize_with = "crate::schema::present")]
+    pub dependent_required: Option<BTreeMap<String, Vec<String>>>,
+    #[serde(default, deserialize_with = "crate::schema::present")]
+    pub dependent_schemas: Option<BTreeMap<String, SchemaValue>>,
+    /// Legacy JSON Schema dependencies: property names or a schema.
+    #[serde(default, deserialize_with = "crate::schema::present")]
+    pub dependencies: Option<BTreeMap<String, SchemaDependency>>,
+    #[serde(rename = "$defs", default, deserialize_with = "crate::schema::present")]
+    pub defs: Option<BTreeMap<String, SchemaValue>>,
+    #[serde(default, deserialize_with = "crate::schema::present")]
+    pub definitions: Option<BTreeMap<String, SchemaValue>>,
+    /// A single schema, or a tuple of schemas in older JSON Schema dialects.
+    #[serde(default, deserialize_with = "crate::schema::present")]
+    pub items: Option<SchemaItems>,
+    #[serde(default, deserialize_with = "crate::schema::present")]
+    pub prefix_items: Option<Vec<SchemaValue>>,
+    #[serde(default, deserialize_with = "crate::schema::present")]
+    pub additional_items: Option<Box<SchemaValue>>,
+    #[serde(default, deserialize_with = "crate::schema::present")]
+    pub unevaluated_items: Option<Box<SchemaValue>>,
+    #[serde(default, deserialize_with = "crate::schema::present")]
+    pub contains: Option<Box<SchemaValue>>,
     #[serde(flatten)]
     pub extras: BTreeMap<String, Any>,
+}
+
+/// The `items` keyword differs between tuple-capable and modern dialects.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum SchemaItems {
+    Schema(Box<SchemaValue>),
+    Tuple(Vec<SchemaValue>),
+}
+
+/// A legacy `dependencies` entry contains property names or a schema.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum SchemaDependency {
+    Required(Vec<String>),
+    Schema(Box<SchemaValue>),
 }
 
 /// When request bodies or response payloads may be one of a number of different schemas.

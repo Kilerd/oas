@@ -416,17 +416,7 @@ impl Default for MediaType {
 
 impl Schema {
     pub fn new() -> Self {
-        Self {
-            _type: None,
-            _ref: None,
-            format: None,
-            nullable: None,
-            description: None,
-            content_media_type: None,
-            content_encoding: None,
-            content_schema: None,
-            extras: BTreeMap::new(),
-        }
+        Self::default()
     }
 
     pub fn with_type(mut self, schema_type: impl Into<String>) -> Self {
@@ -502,12 +492,6 @@ impl Schema {
 
     pub fn object() -> Self {
         Self::new().with_type("object")
-    }
-}
-
-impl Default for Schema {
-    fn default() -> Self {
-        Self::new()
     }
 }
 
