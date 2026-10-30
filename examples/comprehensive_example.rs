@@ -24,72 +24,56 @@ fn create_comprehensive_api() -> oas::OpenAPIV3 {
     let mut schemas = BTreeMap::new();
 
     // User schema
-    let mut user_properties = BTreeMap::new();
-    user_properties.insert(
-        "properties".to_string(),
-        serde_json::json!({
-            "id": {
-                "type": "integer",
-                "format": "int64",
-                "description": "Unique identifier for the user"
-            },
-            "username": {
-                "type": "string",
-                "description": "Username for login"
-            },
-            "email": {
-                "type": "string",
-                "format": "email",
-                "description": "User's email address"
-            },
-            "created_at": {
-                "type": "string",
-                "format": "date-time",
-                "description": "User creation timestamp"
-            }
-        }),
-    );
-    user_properties.insert(
-        "required".to_string(),
-        serde_json::json!(["id", "username", "email"]),
-    );
-
     let user_schema = Schema {
-        _type: Some("object".into()),
-        description: Some("A user in the system".to_string()),
-        extras: user_properties,
-        format: None,
-        ..Schema::default()
+        properties: Some(BTreeMap::from([
+            (
+                "id".into(),
+                Schema::integer()
+                    .with_format("int64")
+                    .with_description("Unique identifier for the user")
+                    .into(),
+            ),
+            (
+                "username".into(),
+                Schema::string()
+                    .with_description("Username for login")
+                    .into(),
+            ),
+            (
+                "email".into(),
+                Schema::string()
+                    .with_format("email")
+                    .with_description("User's email address")
+                    .into(),
+            ),
+            (
+                "created_at".into(),
+                Schema::string()
+                    .with_format("date-time")
+                    .with_description("User creation timestamp")
+                    .into(),
+            ),
+        ])),
+        required: Some(vec!["id".into(), "username".into(), "email".into()]),
+        ..Schema::object().with_description("A user in the system")
     };
 
     schemas.insert("User".to_string(), Referenceable::data(user_schema));
 
     // Error schema
-    let mut error_properties = BTreeMap::new();
-    error_properties.insert(
-        "properties".to_string(),
-        serde_json::json!({
-            "code": {
-                "type": "integer",
-                "description": "Error code"
-            },
-            "message": {
-                "type": "string",
-                "description": "Error message"
-            }
-        }),
-    );
-    error_properties.insert(
-        "required".to_string(),
-        serde_json::json!(["code", "message"]),
-    );
-
     let error_schema = Schema {
-        _type: Some("object".into()),
-        description: Some("Error response".to_string()),
-        extras: error_properties,
-        format: None,
-        ..Schema::default()
+        properties: Some(BTreeMap::from([
+            (
+                "code".into(),
+                Schema::integer().with_description("Error code").into(),
+            ),
+            (
+                "message".into(),
+                Schema::string().with_description("Error message").into(),
+            ),
+        ])),
+        required: Some(vec!["code".into(), "message".into()]),
+        ..Schema::object().with_description("Error response")
     };
 
     schemas.insert("Error".to_string(), Referenceable::data(error_schema));

@@ -5,7 +5,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 Rust OpenAPI models with Serde serialization and builders for constructing and
-editing API descriptions. The `0.4.0-dev` prerelease preserves retained-object
+editing API descriptions. The `0.4.1-dev` prerelease preserves retained-object
 metadata and reference annotations during typed edits. It includes schema type
 unions, boolean schemas, references with sibling keywords, and OpenAPI 3.2
 streaming media types, including Server-Sent Events (SSE).
@@ -20,15 +20,16 @@ changes and remaining model differences.
 
 ```toml
 [dependencies]
-oas = "=0.4.0-dev"
+oas = "=0.4.1-dev"
 serde_json = "1"
 ```
 
 This prerelease introduces Rust source changes: retained objects and references
 gain metadata fields, Link operation IDs and OAuth authorization URLs become
 optional, OAuth flow storage is boxed, and `Tag::with_description` edits an
-existing tag. Complete struct literals need adaptation. See the
-[0.4.0-dev changelog](CHANGELOG.md#040-dev---2026-10-29) and
+existing tag. Structural schema keywords now use typed fields and reject malformed
+values during parsing. Complete struct literals need adaptation. See the
+[0.4.1-dev changelog](CHANGELOG.md#041-dev---2026-10-30) and
 [Rust API migration](MIGRATION.md).
 
 ## Quick start
@@ -93,9 +94,12 @@ let media = MediaType::new().with_schema(nullable_string);
 ```
 
 Use `SchemaValue::as_object()` / `as_object_mut()` to inspect or modify object
-fields, and handle `SchemaValue::Boolean` separately. Keywords without dedicated
-fields, including `properties`, `required`, `$defs`, and `anyOf`, are retained as
-JSON values in `Schema.extras`.
+fields, and handle `SchemaValue::Boolean` separately. Structural keywords such as
+`properties`, `required`, `$defs`, and `anyOf` have typed fields. Unknown vocabulary
+and literal payloads remain in `Schema.extras`. Use `try_for_each_child_mut` to
+visit immediate schema children without traversing examples or defaults; callers
+control recursion and reference resolution. See the [migration guide](MIGRATION.md)
+for the field-access changes and stricter parsing of these keywords.
 
 Other reusable OpenAPI objects use `Referenceable<T>` for inline data or references:
 
@@ -135,21 +139,27 @@ fn main() {
         .with_content_media_type("application/json")
         .with_content_schema(Schema::reference("#/components/schemas/Payload"));
     let event = Schema {
-        extras: BTreeMap::from([
-            ("required".into(), json!(["data"])),
-            ("properties".into(), json!({
-                "event": {"type": "string"},
-                "id": {"type": "string"},
-                "retry": {"type": "integer", "minimum": 0},
-                "data": data
-            })),
-        ]),
+        required: Some(vec!["data".into()]),
+        properties: Some(BTreeMap::from([
+            ("event".into(), Schema::string().into()),
+            ("id".into(), Schema::string().into()),
+            (
+                "retry".into(),
+                Schema {
+                    extras: BTreeMap::from([("minimum".into(), json!(0))]),
+                    ..Schema::integer()
+                }
+                .into(),
+            ),
+            ("data".into(), data.into()),
+        ])),
         ..Schema::object()
     };
     let payload = Schema {
-        extras: BTreeMap::from([("properties".into(), json!({
-            "message": {"type": ["string", "null"]}
-        }))]),
+        properties: Some(BTreeMap::from([(
+            "message".into(),
+            Schema::string().with_types(["string", "null"]).into(),
+        )])),
         ..Schema::object()
     };
     let schemas: BTreeMap<String, SchemaValue> = BTreeMap::from([
@@ -202,7 +212,7 @@ round trip for unsupported fields.
 
 ## More examples and documentation
 
-- [API reference for 0.4.0-dev](https://docs.rs/oas/0.4.0-dev/oas/)
+- [API reference for 0.4.1-dev](https://docs.rs/oas/0.4.1-dev/oas/)
 - [Usage guide](https://github.com/Kilerd/oas/blob/main/USAGE_GUIDE.md) for builders, operations, parameters, and reusable components
 - [Basic builder example](https://github.com/Kilerd/oas/blob/main/examples/easy_usage.rs)
 - [Complete API example](https://github.com/Kilerd/oas/blob/main/examples/comprehensive_example.rs)

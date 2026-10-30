@@ -1,11 +1,11 @@
 [package]
 name = "oas"
 description = "OpenAPI models with JSON Schema 2020-12 and streaming media type support"
-version = "0.4.0-dev"
+version = "0.4.1-dev"
 edition = "2021"
 license = "MIT"
 repository = "https://github.com/Kilerd/oas"
-documentation = "https://docs.rs/oas/0.4.0-dev/oas/"
+documentation = "https://docs.rs/oas/0.4.1-dev/oas/"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 

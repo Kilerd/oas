@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.1-dev] - 2026-10-30
+
+### Added
+- Typed structural schema fields for properties, required members, object counts, compositions, conditionals, dependencies, definitions, and array applicators.
+- Shallow mutable schema visitors, including keyword-aware traversal in lexical order. Callers retain control of recursion, dialect selection, and reference resolution.
+- `SchemaCount` preserves integer-valued JSON number forms and exposes both the count and its number representation.
+
+### Changed
+- Structural schema keywords move from `extras` to typed fields. Explicit empty collections remain present; null and malformed structural values now fail parsing. Complete schema literals need the new fields or a default update.
+- Examples and guides edit schema fields directly. Reference-to-schema conversion moves retained siblings without cloning them; explicit-null payload fields share one presence parser.
+
+See [MIGRATION.md](MIGRATION.md) for selective-parsing requirements and field migration. This prerelease does not add deferred parsing, document validation, or reference resolution.
+
 ## [0.4.0-dev] - 2026-10-29
 
 ### Added
