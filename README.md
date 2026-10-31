@@ -91,9 +91,12 @@ let media = MediaType::new().with_schema(nullable_string);
 ```
 
 Use `SchemaValue::as_object()` / `as_object_mut()` to inspect or modify object
-fields, and handle `SchemaValue::Boolean` separately. Keywords without dedicated
-fields, including `properties`, `required`, `$defs`, and `anyOf`, are retained as
-JSON values in `Schema.extras`.
+fields, and handle `SchemaValue::Boolean` separately. Structural keywords such as
+`properties`, `required`, `$defs`, and `anyOf` have typed fields. Unknown vocabulary
+and literal payloads remain in `Schema.extras`. Use `try_for_each_child_mut` to
+visit immediate schema children without traversing examples or defaults; callers
+control recursion and reference resolution. See the [migration guide](MIGRATION.md)
+for the unreleased field-access changes and stricter parsing of these keywords.
 
 Other reusable OpenAPI objects use `Referenceable<T>` for inline data or references:
 
@@ -133,21 +136,27 @@ fn main() {
         .with_content_media_type("application/json")
         .with_content_schema(Schema::reference("#/components/schemas/Payload"));
     let event = Schema {
-        extras: BTreeMap::from([
-            ("required".into(), json!(["data"])),
-            ("properties".into(), json!({
-                "event": {"type": "string"},
-                "id": {"type": "string"},
-                "retry": {"type": "integer", "minimum": 0},
-                "data": data
-            })),
-        ]),
+        required: Some(vec!["data".into()]),
+        properties: Some(BTreeMap::from([
+            ("event".into(), Schema::string().into()),
+            ("id".into(), Schema::string().into()),
+            (
+                "retry".into(),
+                Schema {
+                    extras: BTreeMap::from([("minimum".into(), json!(0))]),
+                    ..Schema::integer()
+                }
+                .into(),
+            ),
+            ("data".into(), data.into()),
+        ])),
         ..Schema::object()
     };
     let payload = Schema {
-        extras: BTreeMap::from([("properties".into(), json!({
-            "message": {"type": ["string", "null"]}
-        }))]),
+        properties: Some(BTreeMap::from([(
+            "message".into(),
+            Schema::string().with_types(["string", "null"]).into(),
+        )])),
         ..Schema::object()
     };
     let schemas: BTreeMap<String, SchemaValue> = BTreeMap::from([
@@ -192,10 +201,11 @@ let spec: OpenAPIV3 = serde_json::from_str(json_spec).unwrap();
 println!("{}", serde_json::to_string_pretty(&spec).unwrap());
 ```
 
-Serde support can also be used with a separately chosen YAML serializer. Unknown
-schema keywords are preserved; unknown fields on most other objects are currently
-discarded. Successful deserialization does not guarantee a valid document or a
-lossless round trip for unsupported fields.
+Serde support can also be used with a separately chosen YAML serializer. For
+field preservation when editing a typed document, see
+[document editing and extensions](MIGRATION.md#document-editing-and-extensions).
+Successful deserialization does not guarantee a valid document or a lossless
+round trip for unsupported fields.
 
 ## More examples and documentation
 

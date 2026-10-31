@@ -8,6 +8,8 @@ use serde::{Deserialize, Serialize};
 use serde_with::skip_serializing_none;
 use std::collections::BTreeMap;
 
+pub use crate::schema::SchemaCount;
+
 /// Type alias for arbitrary JSON values.
 pub type Any = serde_json::Value;
 
@@ -31,13 +33,58 @@ pub type Any = serde_json::Value;
 /// let component_ref = Referenceable::schema_ref("User");
 /// ```
 #[skip_serializing_none]
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize)]
 #[serde(untagged)]
 pub enum Referenceable<T> {
-    /// Inline data
-    Data(T),
     /// Reference to a component
     Reference(Reference),
+    /// Inline data
+    Data(T),
+}
+
+impl<'de, T: Deserialize<'de>> Deserialize<'de> for Referenceable<T> {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        #[derive(Deserialize)]
+        #[serde(untagged)]
+        enum Candidate<T> {
+            Reference(#[serde(deserialize_with = "deserialize_reference_object")] Reference),
+            Data(T),
+            // Accept additional Reference Object properties only after giving
+            // schema siblings and generic inline payloads a chance to parse.
+            ReferenceWithAdditionalProperties(Reference),
+        }
+
+        match Candidate::deserialize(deserializer)? {
+            Candidate::Reference(reference)
+            | Candidate::ReferenceWithAdditionalProperties(reference) => {
+                Ok(Self::Reference(reference))
+            }
+            Candidate::Data(data) => Ok(Self::Data(data)),
+        }
+    }
+}
+
+fn deserialize_reference_object<'de, D>(deserializer: D) -> Result<Reference, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    // Only the Reference Object shape takes precedence over inline data. In
+    // particular, schema references with sibling keywords must remain schemas.
+    #[derive(Deserialize)]
+    #[serde(remote = "Reference", deny_unknown_fields)]
+    struct ReferenceObject {
+        #[serde(rename = "$ref")]
+        _ref: String,
+        summary: Option<String>,
+        description: Option<String>,
+        #[serde(skip)]
+        extras: BTreeMap<String, Any>,
+    }
+
+    ReferenceObject::deserialize(deserializer)
 }
 
 impl<T> Referenceable<T> {
@@ -220,6 +267,10 @@ pub struct Info {
     pub license: Option<License>,
     /// The version of the OpenAPI document.
     pub version: String,
+    /// Unmodeled fields, including `x-*` extensions, retained as JSON values.
+    /// Do not duplicate fields with dedicated members in this map.
+    #[serde(flatten)]
+    pub extras: BTreeMap<String, Any>,
 }
 
 /// Contact information for the exposed API.
@@ -232,6 +283,10 @@ pub struct Contact {
     pub url: Option<String>,
     /// The email address of the contact person/organization.
     pub email: Option<String>,
+    /// Unmodeled fields, including `x-*` extensions, retained as JSON values.
+    /// Do not duplicate fields with dedicated members in this map.
+    #[serde(flatten)]
+    pub extras: BTreeMap<String, Any>,
 }
 
 /// License information for the exposed API.
@@ -242,6 +297,10 @@ pub struct License {
     pub name: String,
     /// A URL to the license used for the API. MUST be in the format of a URL.
     pub url: Option<String>,
+    /// Unmodeled fields, including `x-*` extensions, retained as JSON values.
+    /// Do not duplicate fields with dedicated members in this map.
+    #[serde(flatten)]
+    pub extras: BTreeMap<String, Any>,
 }
 
 /// An object representing a Server.
@@ -254,6 +313,10 @@ pub struct Server {
     pub description: Option<String>,
     /// A map between a variable name and its value.
     pub variables: Option<BTreeMap<String, ServerVariable>>,
+    /// Unmodeled fields, including `x-*` extensions, retained as JSON values.
+    /// Do not duplicate fields with dedicated members in this map.
+    #[serde(flatten)]
+    pub extras: BTreeMap<String, Any>,
 }
 
 /// An object representing a Server Variable for server URL template substitution.
@@ -267,6 +330,10 @@ pub struct ServerVariable {
     pub default: String,
     /// An optional description for the server variable.
     pub description: Option<String>,
+    /// Unmodeled fields, including `x-*` extensions, retained as JSON values.
+    /// Do not duplicate fields with dedicated members in this map.
+    #[serde(flatten)]
+    pub extras: BTreeMap<String, Any>,
 }
 
 /// Holds a set of reusable objects for different aspects of the OAS.
@@ -292,6 +359,12 @@ pub struct Components {
     pub links: Option<BTreeMap<String, Referenceable<Link>>>,
     /// An object to hold reusable Callback Objects.
     pub callbacks: Option<BTreeMap<String, Referenceable<Callback>>>,
+    /// Reusable Path Item Objects (OpenAPI 3.1 and later).
+    pub path_items: Option<BTreeMap<String, PathItem>>,
+    /// Unmodeled fields, including `x-*` extensions, retained as JSON values.
+    /// Do not duplicate fields with dedicated members in this map.
+    #[serde(flatten)]
+    pub extras: BTreeMap<String, Any>,
 }
 
 /// Describes the operations available on a single path.
@@ -325,6 +398,10 @@ pub struct PathItem {
     pub servers: Option<Vec<Server>>,
     /// A list of parameters that are applicable for all the operations described under this path.
     pub parameters: Option<Vec<Referenceable<Parameter>>>,
+    /// Unmodeled fields, including `x-*` extensions, retained as JSON values.
+    /// Do not duplicate fields with dedicated members in this map.
+    #[serde(flatten)]
+    pub extras: BTreeMap<String, Any>,
 }
 
 /// Describes a single API operation on a path.
@@ -356,6 +433,10 @@ pub struct Operation {
     pub security: Option<Vec<SecurityRequirement>>,
     /// An alternative server array to service this operation.
     pub servers: Option<Vec<Server>>,
+    /// Unmodeled fields, including `x-*` extensions, retained as JSON values.
+    /// Do not duplicate fields with dedicated members in this map.
+    #[serde(flatten)]
+    pub extras: BTreeMap<String, Any>,
 }
 
 /// Allows referencing an external resource for extended documentation.
@@ -366,6 +447,10 @@ pub struct ExternalDocumentation {
     pub description: Option<String>,
     /// The URL for the target documentation.
     pub url: String,
+    /// Unmodeled fields, including `x-*` extensions, retained as JSON values.
+    /// Do not duplicate fields with dedicated members in this map.
+    #[serde(flatten)]
+    pub extras: BTreeMap<String, Any>,
 }
 
 /// The location of the parameter.
@@ -404,11 +489,16 @@ pub struct Parameter {
     /// The schema defining the type used for the parameter.
     pub schema: Option<SchemaValue>,
     /// Example of the parameter's potential value.
+    #[serde(default, deserialize_with = "crate::schema::present")]
     pub example: Option<Any>,
     /// Examples of the parameter's potential value.
     pub examples: Option<BTreeMap<String, Referenceable<Example>>>,
     /// A map containing the representations for the parameter.
     pub content: Option<BTreeMap<String, MediaType>>,
+    /// Unmodeled fields, including `x-*` extensions, retained as JSON values.
+    /// Do not duplicate fields with dedicated members in this map.
+    #[serde(flatten)]
+    pub extras: BTreeMap<String, Any>,
 }
 
 /// Describes a single request body.
@@ -421,6 +511,10 @@ pub struct RequestBody {
     pub required: Option<bool>,
     /// The content of the request body.
     pub content: BTreeMap<String, MediaType>,
+    /// Unmodeled fields, including `x-*` extensions, retained as JSON values.
+    /// Do not duplicate fields with dedicated members in this map.
+    #[serde(flatten)]
+    pub extras: BTreeMap<String, Any>,
 }
 
 /// Each Media Type Object provides schema and examples for the media type identified by its key.
@@ -434,11 +528,16 @@ pub struct MediaType {
     #[serde(rename = "itemSchema")]
     pub item_schema: Option<SchemaValue>,
     /// Example of the media type.
+    #[serde(default, deserialize_with = "crate::schema::present")]
     pub example: Option<Any>,
     /// Examples of the media type.
     pub examples: Option<BTreeMap<String, Referenceable<Example>>>,
     /// A map between a property name and its encoding information.
     pub encoding: Option<BTreeMap<String, Encoding>>,
+    /// Unmodeled fields, including `x-*` extensions, retained as JSON values.
+    /// Do not duplicate fields with dedicated members in this map.
+    #[serde(flatten)]
+    pub extras: BTreeMap<String, Any>,
 }
 
 /// A single encoding definition applied to a single schema property.
@@ -454,16 +553,53 @@ pub struct Encoding {
     pub style: Option<String>,
     pub explode: Option<bool>,
     pub allow_reserved: Option<bool>,
+    /// Unmodeled fields, including `x-*` extensions, retained as JSON values.
+    /// Do not duplicate fields with dedicated members in this map.
+    #[serde(flatten)]
+    pub extras: BTreeMap<String, Any>,
 }
 
 /// A container for the expected responses of an operation.
 #[skip_serializing_none]
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize)]
 pub struct Responses {
     /// The documentation of responses other than the ones declared for specific HTTP response codes.
     pub default: Option<Referenceable<Response>>,
+    /// HTTP status codes (100–599) and uppercase ranges (1XX–5XX).
     #[serde(flatten)]
     pub data: BTreeMap<String, Referenceable<Response>>,
+    /// Other container fields, including extensions, retained as ordinary JSON.
+    /// Do not duplicate `default` or status keys in this map.
+    #[serde(flatten)]
+    pub extras: BTreeMap<String, Any>,
+}
+
+pub(crate) fn is_response_status(key: &str) -> bool {
+    let bytes = key.as_bytes();
+    bytes.len() == 3
+        && (b'1'..=b'5').contains(&bytes[0])
+        && (bytes[1..] == *b"XX" || bytes[1..].iter().all(u8::is_ascii_digit))
+}
+
+impl<'de> Deserialize<'de> for Responses {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let fields = BTreeMap::<String, Any>::deserialize(deserializer)?;
+        let mut responses = Self::new();
+        for (key, value) in fields {
+            if key == "default" {
+                responses.default =
+                    serde_json::from_value(value).map_err(serde::de::Error::custom)?;
+            } else if is_response_status(&key) {
+                responses.data.insert(
+                    key,
+                    serde_json::from_value(value).map_err(serde::de::Error::custom)?,
+                );
+            } else {
+                responses.extras.insert(key, value);
+            }
+        }
+        Ok(responses)
+    }
 }
 
 /// Describes a single response from an API Operation.
@@ -478,14 +614,59 @@ pub struct Response {
     pub content: Option<BTreeMap<String, MediaType>>,
     /// A map of operations links that can be followed from the response.
     pub links: Option<BTreeMap<String, Referenceable<Link>>>,
+    /// Unmodeled fields, including `x-*` extensions, retained as JSON values.
+    /// Do not duplicate fields with dedicated members in this map.
+    #[serde(flatten)]
+    pub extras: BTreeMap<String, Any>,
 }
 
 /// A map of possible out-of band callbacks related to the parent operation.
 #[skip_serializing_none]
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize)]
 pub struct Callback {
+    /// Root reference, retaining explicit null and malformed values for selective consumers.
+    #[cfg(feature = "lossless-schema-keywords")]
+    #[serde(
+        rename = "$ref",
+        skip_serializing_if = "crate::lossless_component::Field::is_missing"
+    )]
+    pub reference: crate::lossless_component::Field<String>,
+    /// Callback URL expressions, including URLs with an embedded `{expression}`.
     #[serde(flatten)]
     pub data: BTreeMap<String, PathItem>,
+    /// Other container fields, including extensions, retained as ordinary JSON.
+    /// Do not duplicate expression keys in this map.
+    #[serde(flatten)]
+    pub extras: BTreeMap<String, Any>,
+}
+
+impl<'de> Deserialize<'de> for Callback {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let fields = BTreeMap::<String, Any>::deserialize(deserializer)?;
+        let mut callback = Self {
+            #[cfg(feature = "lossless-schema-keywords")]
+            reference: crate::lossless_component::Field::Missing,
+            data: BTreeMap::new(),
+            extras: BTreeMap::new(),
+        };
+        for (key, value) in fields {
+            #[cfg(feature = "lossless-schema-keywords")]
+            if key == "$ref" {
+                callback.reference = crate::lossless_component::Field::from_value(value);
+                continue;
+            }
+            // Extensions remain opaque even when their names contain braces.
+            if !key.starts_with("x-") && key.contains('{') {
+                callback.data.insert(
+                    key,
+                    serde_json::from_value(value).map_err(serde::de::Error::custom)?,
+                );
+            } else {
+                callback.extras.insert(key, value);
+            }
+        }
+        Ok(callback)
+    }
 }
 
 /// Example object.
@@ -498,8 +679,13 @@ pub struct Example {
     /// Long description for the example.
     pub description: Option<String>,
     /// Embedded literal example.
+    #[serde(default, deserialize_with = "crate::schema::present")]
     pub value: Option<Any>,
     pub external_value: Option<String>,
+    /// Unmodeled fields, including `x-*` extensions, retained as JSON values.
+    /// Do not duplicate fields with dedicated members in this map.
+    #[serde(flatten)]
+    pub extras: BTreeMap<String, Any>,
 }
 
 /// Represents a possible design-time link for a response.
@@ -510,15 +696,20 @@ pub struct Link {
     /// A relative or absolute URI reference to an OAS operation.
     pub operation_ref: Option<String>,
     /// The name of an existing, resolvable OAS operation
-    pub operation_id: String,
+    pub operation_id: Option<String>,
     /// A map representing parameters to pass to an operation.
     pub parameters: Option<BTreeMap<String, Any>>,
     /// A literal value or `{expression}` to use as a request body.
+    #[serde(default, deserialize_with = "crate::schema::present")]
     pub request_body: Option<Any>,
     /// A description of the link.
     pub description: Option<String>,
     /// A server object to be used by the target operation.
     pub server: Option<Server>,
+    /// Unmodeled fields, including `x-*` extensions, retained as JSON values.
+    /// Do not duplicate fields with dedicated members in this map.
+    #[serde(flatten)]
+    pub extras: BTreeMap<String, Any>,
 }
 
 /// Header object.
@@ -534,9 +725,14 @@ pub struct Header {
     pub explode: Option<bool>,
     pub allow_reserved: Option<bool>,
     pub schema: Option<SchemaValue>,
+    #[serde(default, deserialize_with = "crate::schema::present")]
     pub example: Option<Any>,
     pub examples: Option<BTreeMap<String, Referenceable<Example>>>,
     pub content: Option<BTreeMap<String, MediaType>>,
+    /// Unmodeled fields, including `x-*` extensions, retained as JSON values.
+    /// Do not duplicate fields with dedicated members in this map.
+    #[serde(flatten)]
+    pub extras: BTreeMap<String, Any>,
 }
 
 /// Adds metadata to a single tag that is used by the `Operation` Object.
@@ -550,6 +746,10 @@ pub struct Tag {
     pub description: Option<String>,
     /// Additional external documentation for this tag.
     pub external_docs: Option<ExternalDocumentation>,
+    /// Unmodeled fields, including `x-*` extensions, retained as JSON values.
+    /// Do not duplicate fields with dedicated members in this map.
+    #[serde(flatten)]
+    pub extras: BTreeMap<String, Any>,
 }
 
 /// A simple object to allow referencing other components in the specification.
@@ -559,12 +759,22 @@ pub struct Reference {
     /// The reference string.
     #[serde(rename = "$ref")]
     pub _ref: String,
+    /// OpenAPI 3.1 summary overriding the referenced object's summary.
+    pub summary: Option<String>,
+    /// OpenAPI 3.1 description overriding the referenced object's description.
+    pub description: Option<String>,
+    /// Unmodeled properties retained for document editing, without reference semantics.
+    #[serde(flatten)]
+    pub extras: BTreeMap<String, Any>,
 }
 
 impl Reference {
     pub fn new(reference: impl Into<String>) -> Self {
         Self {
             _ref: reference.into(),
+            summary: None,
+            description: None,
+            extras: BTreeMap::new(),
         }
     }
 }
@@ -616,6 +826,10 @@ impl From<Vec<String>> for SchemaType {
 pub enum SchemaValue {
     Boolean(bool),
     Object(Box<Schema>),
+    /// A malformed structural child retained by lossless decoding.
+    #[cfg(feature = "lossless-schema-keywords")]
+    #[serde(skip_deserializing)]
+    Invalid(Any),
 }
 
 impl SchemaValue {
@@ -623,6 +837,8 @@ impl SchemaValue {
         match self {
             Self::Object(schema) => Some(schema),
             Self::Boolean(_) => None,
+            #[cfg(feature = "lossless-schema-keywords")]
+            Self::Invalid(_) => None,
         }
     }
 
@@ -630,6 +846,8 @@ impl SchemaValue {
         match self {
             Self::Object(schema) => Some(schema),
             Self::Boolean(_) => None,
+            #[cfg(feature = "lossless-schema-keywords")]
+            Self::Invalid(_) => None,
         }
     }
 }
@@ -654,7 +872,35 @@ impl From<bool> for SchemaValue {
 
 impl From<Reference> for SchemaValue {
     fn from(reference: Reference) -> Self {
-        Schema::reference(reference._ref).into()
+        let siblings = Any::Object(reference.extras.into_iter().collect());
+        #[cfg(feature = "lossless-schema-keywords")]
+        let mut schema = match SchemaValue::from_lossless_value(siblings)
+            .expect("reference siblings are an object")
+        {
+            SchemaValue::Object(schema) => *schema,
+            _ => unreachable!("reference siblings are an object"),
+        };
+        // Strict schemas cannot retain malformed known fields alongside typed ones.
+        // Only promote when serialization preserves the arbitrary reference siblings.
+        #[cfg(not(feature = "lossless-schema-keywords"))]
+        let mut schema = Schema::deserialize(&siblings)
+            .ok()
+            .filter(|schema| serde_json::to_value(schema).ok().as_ref() == Some(&siblings))
+            .unwrap_or_else(|| {
+                let Any::Object(extras) = siblings else {
+                    unreachable!("reference siblings are an object")
+                };
+                Schema {
+                    extras: extras.into_iter().collect(),
+                    ..Schema::default()
+                }
+            });
+        schema._ref = Some(reference._ref);
+        schema.description = reference.description;
+        if let Some(summary) = reference.summary {
+            schema.extras.insert("summary".into(), summary.into());
+        }
+        schema.into()
     }
 }
 
@@ -670,16 +916,30 @@ impl From<Referenceable<Schema>> for SchemaValue {
 
 /// A schema object defining input and output data types.
 ///
-/// Use [`SchemaValue`] where a schema may also be a boolean. Keywords without
-/// dedicated fields (including nested schemas) are preserved verbatim in `extras`.
+/// Use [`SchemaValue`] where a schema may also be a boolean. Structural keywords
+/// have typed fields; unknown vocabulary and literal payloads remain in `extras`.
 /// This is a representation, not a JSON Schema validator or reference resolver.
-#[skip_serializing_none]
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
+///
+/// The opt-in `lossless-schema-keywords` feature retains malformed newly modeled
+/// keywords in `extras` and promotes valid fields without changing formerly opaque
+/// child values. Previously typed scalar positions retain their old admission.
+/// Typed assignments override matching extras during serialization and counting;
+/// clearing an assignment exposes any retained fallback again. Cargo feature
+/// unification applies this mode to all consumers of the crate.
+#[cfg_attr(not(feature = "lossless-schema-keywords"), skip_serializing_none)]
+#[derive(Debug, Clone, Default)]
+#[cfg_attr(
+    not(feature = "lossless-schema-keywords"),
+    derive(Serialize, Deserialize)
+)]
+#[cfg_attr(
+    not(feature = "lossless-schema-keywords"),
+    serde(rename_all = "camelCase")
+)]
 pub struct Schema {
-    #[serde(rename = "type")]
+    #[cfg_attr(not(feature = "lossless-schema-keywords"), serde(rename = "type"))]
     pub _type: Option<SchemaType>,
-    #[serde(rename = "$ref")]
+    #[cfg_attr(not(feature = "lossless-schema-keywords"), serde(rename = "$ref"))]
     pub _ref: Option<String>,
     pub format: Option<String>,
     /// Legacy OpenAPI 3.0 keyword, retained without automatic conversion.
@@ -692,8 +952,163 @@ pub struct Schema {
     pub content_encoding: Option<String>,
     /// Schema describing decoded string content. Does not change the wire type.
     pub content_schema: Option<Box<SchemaValue>>,
-    #[serde(flatten)]
+    /// Native schema wrapper marker, retained without interpreting its media type.
+    #[cfg(feature = "lossless-schema-keywords")]
+    pub schema_format: Option<String>,
+    /// Wrapped schema when a `schemaFormat` marker is present.
+    #[cfg(feature = "lossless-schema-keywords")]
+    pub schema: Option<Box<SchemaValue>>,
+    /// Documentation metadata, retaining missing and malformed fields individually.
+    #[cfg(feature = "lossless-schema-keywords")]
+    pub external_docs: Option<crate::lossless_component::ExternalDocumentation>,
+    /// Discriminator metadata; mapping entries retain their original field states.
+    #[cfg(feature = "lossless-schema-keywords")]
+    pub discriminator: Option<crate::lossless_component::Discriminator>,
+    #[cfg_attr(
+        not(feature = "lossless-schema-keywords"),
+        serde(default, deserialize_with = "crate::schema::present")
+    )]
+    pub properties: Option<BTreeMap<String, SchemaValue>>,
+    #[cfg_attr(
+        not(feature = "lossless-schema-keywords"),
+        serde(default, deserialize_with = "crate::schema::present")
+    )]
+    pub pattern_properties: Option<BTreeMap<String, SchemaValue>>,
+    #[cfg_attr(
+        not(feature = "lossless-schema-keywords"),
+        serde(default, deserialize_with = "crate::schema::present")
+    )]
+    pub required: Option<Vec<String>>,
+    #[cfg_attr(
+        not(feature = "lossless-schema-keywords"),
+        serde(default, deserialize_with = "crate::schema::present")
+    )]
+    pub min_properties: Option<SchemaCount>,
+    #[cfg_attr(
+        not(feature = "lossless-schema-keywords"),
+        serde(default, deserialize_with = "crate::schema::present")
+    )]
+    pub max_properties: Option<SchemaCount>,
+    #[cfg_attr(
+        not(feature = "lossless-schema-keywords"),
+        serde(default, deserialize_with = "crate::schema::present")
+    )]
+    pub additional_properties: Option<Box<SchemaValue>>,
+    #[cfg_attr(
+        not(feature = "lossless-schema-keywords"),
+        serde(default, deserialize_with = "crate::schema::present")
+    )]
+    pub unevaluated_properties: Option<Box<SchemaValue>>,
+    #[cfg_attr(
+        not(feature = "lossless-schema-keywords"),
+        serde(default, deserialize_with = "crate::schema::present")
+    )]
+    pub property_names: Option<Box<SchemaValue>>,
+    #[cfg_attr(
+        not(feature = "lossless-schema-keywords"),
+        serde(default, deserialize_with = "crate::schema::present")
+    )]
+    pub all_of: Option<Vec<SchemaValue>>,
+    #[cfg_attr(
+        not(feature = "lossless-schema-keywords"),
+        serde(default, deserialize_with = "crate::schema::present")
+    )]
+    pub any_of: Option<Vec<SchemaValue>>,
+    #[cfg_attr(
+        not(feature = "lossless-schema-keywords"),
+        serde(default, deserialize_with = "crate::schema::present")
+    )]
+    pub one_of: Option<Vec<SchemaValue>>,
+    #[cfg_attr(
+        not(feature = "lossless-schema-keywords"),
+        serde(default, deserialize_with = "crate::schema::present")
+    )]
+    pub not: Option<Box<SchemaValue>>,
+    #[cfg_attr(
+        not(feature = "lossless-schema-keywords"),
+        serde(rename = "if", default, deserialize_with = "crate::schema::present")
+    )]
+    pub if_schema: Option<Box<SchemaValue>>,
+    #[cfg_attr(
+        not(feature = "lossless-schema-keywords"),
+        serde(rename = "then", default, deserialize_with = "crate::schema::present")
+    )]
+    pub then_schema: Option<Box<SchemaValue>>,
+    #[cfg_attr(
+        not(feature = "lossless-schema-keywords"),
+        serde(rename = "else", default, deserialize_with = "crate::schema::present")
+    )]
+    pub else_schema: Option<Box<SchemaValue>>,
+    #[cfg_attr(
+        not(feature = "lossless-schema-keywords"),
+        serde(default, deserialize_with = "crate::schema::present")
+    )]
+    pub dependent_required: Option<BTreeMap<String, Vec<String>>>,
+    #[cfg_attr(
+        not(feature = "lossless-schema-keywords"),
+        serde(default, deserialize_with = "crate::schema::present")
+    )]
+    pub dependent_schemas: Option<BTreeMap<String, SchemaValue>>,
+    /// Legacy JSON Schema dependencies: property names or a schema.
+    #[cfg_attr(
+        not(feature = "lossless-schema-keywords"),
+        serde(default, deserialize_with = "crate::schema::present")
+    )]
+    pub dependencies: Option<BTreeMap<String, SchemaDependency>>,
+    #[cfg_attr(
+        not(feature = "lossless-schema-keywords"),
+        serde(rename = "$defs", default, deserialize_with = "crate::schema::present")
+    )]
+    pub defs: Option<BTreeMap<String, SchemaValue>>,
+    #[cfg_attr(
+        not(feature = "lossless-schema-keywords"),
+        serde(default, deserialize_with = "crate::schema::present")
+    )]
+    pub definitions: Option<BTreeMap<String, SchemaValue>>,
+    /// A single schema, or a tuple of schemas in older JSON Schema dialects.
+    #[cfg_attr(
+        not(feature = "lossless-schema-keywords"),
+        serde(default, deserialize_with = "crate::schema::present")
+    )]
+    pub items: Option<SchemaItems>,
+    #[cfg_attr(
+        not(feature = "lossless-schema-keywords"),
+        serde(default, deserialize_with = "crate::schema::present")
+    )]
+    pub prefix_items: Option<Vec<SchemaValue>>,
+    #[cfg_attr(
+        not(feature = "lossless-schema-keywords"),
+        serde(default, deserialize_with = "crate::schema::present")
+    )]
+    pub additional_items: Option<Box<SchemaValue>>,
+    #[cfg_attr(
+        not(feature = "lossless-schema-keywords"),
+        serde(default, deserialize_with = "crate::schema::present")
+    )]
+    pub unevaluated_items: Option<Box<SchemaValue>>,
+    #[cfg_attr(
+        not(feature = "lossless-schema-keywords"),
+        serde(default, deserialize_with = "crate::schema::present")
+    )]
+    pub contains: Option<Box<SchemaValue>>,
+    #[cfg_attr(not(feature = "lossless-schema-keywords"), serde(flatten))]
     pub extras: BTreeMap<String, Any>,
+}
+
+/// The `items` keyword differs between tuple-capable and modern dialects.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum SchemaItems {
+    Schema(Box<SchemaValue>),
+    Tuple(Vec<SchemaValue>),
+}
+
+/// A legacy `dependencies` entry contains property names or a schema.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum SchemaDependency {
+    Required(Vec<String>),
+    Schema(Box<SchemaValue>),
 }
 
 /// When request bodies or response payloads may be one of a number of different schemas.

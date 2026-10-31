@@ -41,13 +41,82 @@ pub enum SecurityType {
 }
 
 /// Defines a security scheme that can be used by the operations.
-#[skip_serializing_none]
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct SecurityScheme {
-    #[serde(flatten)]
     pub _type: SecurityType,
     /// A short description for security scheme.
     pub description: Option<String>,
+    /// Extension fields and other unmodeled properties.
+    pub extras: BTreeMap<String, serde_json::Value>,
+}
+
+/// Fields the active variant serializes, which therefore must not also come from `extras`.
+fn modeled_fields(scheme: &SecurityType) -> &'static [&'static str] {
+    match scheme {
+        SecurityType::ApiKey { .. } => &["type", "name", "in"],
+        SecurityType::Http { .. } => &["type", "scheme", "bearerFormat"],
+        SecurityType::Oauth2 { .. } => &["type", "flows"],
+        SecurityType::OpenIdConnect { .. } => &["type", "openIdConnectUrl"],
+    }
+}
+
+impl Serialize for SecurityScheme {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        #[derive(Serialize)]
+        struct Fields<'a> {
+            #[serde(flatten)]
+            _type: &'a SecurityType,
+            #[serde(skip_serializing_if = "Option::is_none")]
+            description: &'a Option<String>,
+            #[serde(flatten)]
+            extras: BTreeMap<&'a str, &'a serde_json::Value>,
+        }
+
+        // A variant change can leave fields of the new variant in `extras`.
+        // Emitting both owners would duplicate JSON keys, so the typed value wins.
+        let modeled = modeled_fields(&self._type);
+        let extras = self
+            .extras
+            .iter()
+            .filter(|(key, _)| key.as_str() != "description" && !modeled.contains(&key.as_str()))
+            .map(|(key, value)| (key.as_str(), value))
+            .collect();
+        Fields {
+            _type: &self._type,
+            description: &self.description,
+            extras,
+        }
+        .serialize(serializer)
+    }
+}
+
+impl<'de> Deserialize<'de> for SecurityScheme {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        #[derive(Deserialize)]
+        struct Fields {
+            #[serde(flatten)]
+            _type: SecurityType,
+            description: Option<String>,
+            #[serde(flatten)]
+            extras: BTreeMap<String, serde_json::Value>,
+        }
+
+        let Fields {
+            _type,
+            description,
+            mut extras,
+        } = Fields::deserialize(deserializer)?;
+        // A flattened internally tagged enum leaves its fields available to the
+        // flattened map. Keep one owner so typed edits cannot emit stale values.
+        for field in modeled_fields(&_type) {
+            extras.remove(*field);
+        }
+        Ok(Self {
+            _type,
+            description,
+            extras,
+        })
+    }
 }
 
 /// Allows configuration of the supported OAuth Flows.
@@ -63,21 +132,30 @@ pub struct OauthFlows {
     pub client_credentials: Option<OauthFlow>,
     /// Configuration for the OAuth Authorization Code flow.
     pub authorization_code: Option<OauthFlow>,
+    /// Extension fields and other unmodeled properties.
+    #[serde(flatten)]
+    pub extras: BTreeMap<String, serde_json::Value>,
 }
 
-/// Configuration details for a supported OAuth Flow
+/// Configuration details for a supported OAuth flow.
+///
+/// URL requirements depend on the containing field in [`OauthFlows`]. This model
+/// preserves documents without validating flow-specific required fields.
 #[skip_serializing_none]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct OauthFlow {
-    /// The authorization URL to be used for this flow. This MUST be in the form of a URL.
-    pub authorization_url: String,
-    /// The token URL to be used for this flow. This MUST be in the form of a URL.
+    /// Authorization URL; required for implicit and authorization code flows.
+    pub authorization_url: Option<String>,
+    /// Token URL; required for password, client credentials, and authorization code flows.
     pub token_url: Option<String>,
     /// The URL to be used for obtaining refresh tokens. This MUST be in the form of a URL.
     pub refresh_url: Option<String>,
     /// The available scopes for the OAuth2 security scheme.
     pub scopes: BTreeMap<String, String>,
+    /// Extension fields and other unmodeled properties.
+    #[serde(flatten)]
+    pub extras: BTreeMap<String, serde_json::Value>,
 }
 
 /// Lists the required security schemes to execute this operation.
