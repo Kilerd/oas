@@ -192,14 +192,26 @@ fn is_schema(value: &Value) -> bool {
     value.is_object() || value.is_boolean()
 }
 
-fn opaque(value: Value) -> SchemaValue {
-    match value {
-        Value::Bool(value) => SchemaValue::Boolean(value),
-        Value::Object(fields) => Schema::decode(fields, Origin::FormerlyOpaque)
-            .expect("opaque schema fields are retained")
-            .into(),
-        _ => unreachable!("schema shape checked before consuming"),
+impl SchemaValue {
+    /// Decode an object or boolean schema from a previously untyped boundary.
+    ///
+    /// Unlike `Deserialize`, this retains null or malformed legacy keywords in
+    /// `Schema::extras`, including nested `contentSchema` values. Valid fields
+    /// become typed; this does not validate a schema or resolve references.
+    /// Available with `lossless-schema-keywords`.
+    pub fn from_lossless_value(value: Value) -> Result<Self, serde_json::Error> {
+        match value {
+            Value::Bool(value) => Ok(Self::Boolean(value)),
+            Value::Object(fields) => Schema::decode(fields, Origin::FormerlyOpaque).map(Into::into),
+            _ => Err(<serde_json::Error as serde::de::Error>::custom(
+                "expected an object or boolean schema",
+            )),
+        }
     }
+}
+
+fn opaque(value: Value) -> SchemaValue {
+    SchemaValue::from_lossless_value(value).expect("schema shape checked before consuming")
 }
 
 fn child(value: Value) -> Result<Box<SchemaValue>, Value> {
