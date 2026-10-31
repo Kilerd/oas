@@ -40,6 +40,94 @@ fn compatibility_inputs() -> Vec<Value> {
 }
 
 #[test]
+fn required_name_edits_preserve_malformed_values_and_typed_precedence() {
+    for (input, expected) in [
+        (
+            json!({"required":["usage","result","usage"],"dependentRequired":{"usage":["result"],"result":["usage","other"]}}),
+            json!({"required":["result"],"dependentRequired":{"result":["other"]}}),
+        ),
+        (
+            json!({"required":["usage",null,7,"result"],"dependentRequired":{"usage":false,"result":["usage",null,7,"other"],"opaque":false}}),
+            json!({"required":[null,7,"result"],"dependentRequired":{"result":[null,7,"other"],"opaque":false}}),
+        ),
+    ] {
+        let mut value = SchemaValue::from_lossless_value(input)
+            .unwrap()
+            .admit_legacy_root()
+            .unwrap();
+        let schema = value.as_object_mut().unwrap();
+        assert!(schema.required_contains("usage"));
+        schema.retain_required_names(|name| name != "usage");
+        assert!(!schema.required_contains("usage"));
+        assert!(schema.remove_dependent_required("usage"));
+        schema.retain_dependent_required_names(|name| name != "usage");
+        assert_eq!(serde_json::to_value(value).unwrap(), expected);
+    }
+    for raw in [Value::Null, json!(false), json!("usage"), json!(7)] {
+        let input = json!({"required":raw,"dependentRequired":raw});
+        let mut schema: Schema = serde_json::from_value(input.clone()).unwrap();
+        assert!(!schema.required_contains("usage"));
+        schema.retain_required_names(|_| false);
+        assert!(!schema.remove_dependent_required("usage"));
+        schema.retain_dependent_required_names(|_| false);
+        assert_eq!(serde_json::to_value(schema).unwrap(), input);
+    }
+    let mut schema: Schema =
+        serde_json::from_value(json!({"required":["usage",7],"dependentRequired":{"usage":false}}))
+            .unwrap();
+    schema.required = Some(vec!["result".into()]);
+    schema.dependent_required = Some([("result".into(), vec!["other".into()])].into());
+    assert!(!schema.required_contains("usage"));
+    assert!(schema.required_contains("result"));
+    schema.retain_required_names(|name| name != "result");
+    assert!(!schema.remove_dependent_required("usage"));
+    schema.retain_dependent_required_names(|name| name != "other");
+    assert_eq!(
+        serde_json::to_value(schema).unwrap(),
+        json!({"required":[],"dependentRequired":{"result":[]}})
+    );
+}
+
+#[test]
+fn schema_set_normalization_preserves_malformed_members_and_literals() {
+    for (input, expected) in [
+        (
+            json!({"required":["z","a","z"],"type":["string","null","string"],"examples":[["z","a","z"]]}),
+            json!({"required":["a","z"],"type":["null","string"],"examples":[["z","a","z"]]}),
+        ),
+        (
+            json!({"required":["z",null,7,"a",null],"type":["string",false,"null",7,false],"examples":[["z",null,"a"]]}),
+            json!({"required":["a","z",7,null],"type":["null","string",7,false],"examples":[["z",null,"a"]]}),
+        ),
+        (
+            json!({"required":false,"type":"string","example":{"required":["z","a"]}}),
+            json!({"required":false,"type":"string","example":{"required":["z","a"]}}),
+        ),
+    ] {
+        let mut value = SchemaValue::from_lossless_value(input).unwrap();
+        value
+            .as_object_mut()
+            .unwrap()
+            .normalize_required_and_type_sets_by_key(|value| serde_json::to_vec(value).unwrap());
+        assert_eq!(serde_json::to_value(value).unwrap(), expected);
+    }
+    let mut value =
+        SchemaValue::from_lossless_value(json!({"required":[null],"type":[7]})).unwrap();
+    let schema = value.as_object_mut().unwrap();
+    schema.required = Some(vec!["z".into(), "a".into(), "z".into()]);
+    schema._type = Some(oas::SchemaType::Multiple(vec![
+        "string".into(),
+        "null".into(),
+        "string".into(),
+    ]));
+    schema.normalize_required_and_type_sets_by_key(|value| serde_json::to_vec(value).unwrap());
+    assert_eq!(
+        serde_json::to_value(value).unwrap(),
+        json!({"required":["a","z"],"type":["null","string"]})
+    );
+}
+
+#[test]
 fn untyped_schema_entry_preserves_root_and_nested_legacy_fields() {
     for input in compatibility_inputs().into_iter().chain([
         json!(true),

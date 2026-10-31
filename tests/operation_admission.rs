@@ -178,6 +178,41 @@ fn reference_candidates_preserve_siblings_and_inline_precedence() {
 }
 
 #[test]
+fn callback_reference_fields_remain_editable_with_inline_children() {
+    use oas::lossless_component::Field;
+    for reference in [json!("#/components/callbacks/Event"), Value::Null, json!(7)] {
+        let input = json!({"$ref":reference, "{$request.body#/url}":{
+            "post":{"responses":{"204":{"description":"done"}}}
+        }, "x-note":{"$ref":"literal"}});
+        let mut standalone: oas::Callback = serde_json::from_value(input.clone()).unwrap();
+        assert_eq!(serde_json::to_value(&standalone).unwrap(), input);
+        let operation = Operation::decode(with_child("callback", input.clone()))
+            .unwrap()
+            .admit()
+            .unwrap();
+        let oas::Referenceable::Data(mut admitted) =
+            operation.callbacks.unwrap().remove("next").unwrap()
+        else {
+            panic!("valid inline callback children take precedence");
+        };
+        for callback in [&mut standalone, &mut admitted] {
+            match (&reference, &callback.reference) {
+                (Value::String(expected), Field::Value(actual)) => assert_eq!(actual, expected),
+                (_, Field::Invalid(actual)) => assert_eq!(actual, &reference),
+                _ => panic!("reference presence and shape must be retained"),
+            }
+            callback.reference = Field::Value("#/components/callbacks/PublicEvent".into());
+            let mut expected = input.clone();
+            expected["$ref"] = json!("#/components/callbacks/PublicEvent");
+            assert_eq!(serde_json::to_value(callback).unwrap(), expected);
+        }
+    }
+    let missing: oas::Callback = serde_json::from_value(json!({})).unwrap();
+    assert!(missing.reference.is_missing());
+    assert_eq!(serde_json::to_value(missing).unwrap(), json!({}));
+}
+
+#[test]
 fn ordinary_nested_field_acceptance_matches_strict_decoder() {
     for (kind, base, fields) in [
         (

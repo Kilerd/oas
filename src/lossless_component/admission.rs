@@ -440,11 +440,10 @@ impl Admit for Callback {
                 extras,
             }))
         } else {
-            let mut extras = self.extras;
-            retain(&mut extras, "$ref", self.reference)?;
             Ok(crate::Referenceable::Data(crate::Callback {
+                reference: self.reference,
                 data: self.paths.admit()?,
-                extras,
+                extras: self.extras,
             }))
         }
     }

@@ -2,7 +2,7 @@
 //! Decoding establishes shape, not protocol validity or reference permission.
 use super::*;
 
-node!(metadata_access Components {
+node!(metadata_collections Components {
     parameters: Fields<Parameter> => "parameters", correlation_ids: Fields<Correlation> => "correlationIds",
     channel_bindings: Fields<Bindings> => "channelBindings", operation_bindings: Fields<Bindings> => "operationBindings",
     message_bindings: Fields<Bindings> => "messageBindings", tags: Fields<Tag> => "tags",
@@ -25,7 +25,7 @@ impl NodeLookup for Components {
     }
 }
 
-node!(metadata_access Metadata {
+node!(metadata_selected Metadata {
     tags: List<Tag> => "tags", external_docs: ExternalDocumentation => "externalDocs",
     bindings: Bindings => "bindings", correlation_id: Correlation => "correlationId"
 });
