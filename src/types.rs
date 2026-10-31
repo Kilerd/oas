@@ -624,6 +624,13 @@ pub struct Response {
 #[skip_serializing_none]
 #[derive(Debug, Clone, Serialize)]
 pub struct Callback {
+    /// Root reference, retaining explicit null and malformed values for selective consumers.
+    #[cfg(feature = "lossless-schema-keywords")]
+    #[serde(
+        rename = "$ref",
+        skip_serializing_if = "crate::lossless_component::Field::is_missing"
+    )]
+    pub reference: crate::lossless_component::Field<String>,
     /// Callback URL expressions, including URLs with an embedded `{expression}`.
     #[serde(flatten)]
     pub data: BTreeMap<String, PathItem>,
@@ -637,10 +644,17 @@ impl<'de> Deserialize<'de> for Callback {
     fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
         let fields = BTreeMap::<String, Any>::deserialize(deserializer)?;
         let mut callback = Self {
+            #[cfg(feature = "lossless-schema-keywords")]
+            reference: crate::lossless_component::Field::Missing,
             data: BTreeMap::new(),
             extras: BTreeMap::new(),
         };
         for (key, value) in fields {
+            #[cfg(feature = "lossless-schema-keywords")]
+            if key == "$ref" {
+                callback.reference = crate::lossless_component::Field::from_value(value);
+                continue;
+            }
             // Extensions remain opaque even when their names contain braces.
             if !key.starts_with("x-") && key.contains('{') {
                 callback.data.insert(

@@ -7,6 +7,97 @@ use serde::{
 use serde_json::{Map, Value};
 use std::collections::BTreeMap;
 
+impl Schema {
+    /// Test string membership in the effective `required` array.
+    /// Typed assignments shadow extras; malformed elements do not match a name.
+    pub fn required_contains(&self, name: &str) -> bool {
+        if let Some(required) = &self.required {
+            required.iter().any(|value| value == name)
+        } else {
+            self.extras
+                .get("required")
+                .and_then(Value::as_array)
+                .is_some_and(|values| values.iter().any(|value| value.as_str() == Some(name)))
+        }
+    }
+
+    /// Retain matching names in `required`, preserving non-string elements and non-arrays.
+    /// Only the effective value is edited; typed assignments shadow extras.
+    pub fn retain_required_names(&mut self, mut keep: impl FnMut(&str) -> bool) {
+        if let Some(required) = &mut self.required {
+            required.retain(|name| keep(name));
+        } else if let Some(required) = self.extras.get_mut("required") {
+            retain_raw_names(required, &mut keep);
+        }
+    }
+
+    /// Remove one `dependentRequired` trigger, including a malformed trigger value.
+    /// Returns whether the effective map contained the trigger.
+    pub fn remove_dependent_required(&mut self, name: &str) -> bool {
+        if let Some(dependencies) = &mut self.dependent_required {
+            dependencies.remove(name).is_some()
+        } else {
+            self.extras
+                .get_mut("dependentRequired")
+                .and_then(Value::as_object_mut)
+                .is_some_and(|dependencies| dependencies.remove(name).is_some())
+        }
+    }
+
+    /// Retain dependency names in each effective `dependentRequired` array.
+    /// Trigger keys, non-array values and non-string elements are preserved.
+    pub fn retain_dependent_required_names(&mut self, mut keep: impl FnMut(&str) -> bool) {
+        if let Some(dependencies) = &mut self.dependent_required {
+            for required in dependencies.values_mut() {
+                required.retain(|name| keep(name));
+            }
+        } else if let Some(dependencies) = self
+            .extras
+            .get_mut("dependentRequired")
+            .and_then(Value::as_object_mut)
+        {
+            for required in dependencies.values_mut() {
+                retain_raw_names(required, &mut keep);
+            }
+        }
+    }
+
+    /// Sort and deduplicate the effective `required` and array-valued `type` sets.
+    /// The caller supplies a JSON ordering key, including for malformed elements.
+    /// Non-array values and all other keywords (including examples) are untouched.
+    pub fn normalize_required_and_type_sets_by_key<K: Ord>(
+        &mut self,
+        mut key: impl FnMut(&Value) -> K,
+    ) {
+        if let Some(required) = &mut self.required {
+            required.sort_by_cached_key(|name| key(&Value::String(name.clone())));
+            required.dedup();
+        } else if let Some(Value::Array(required)) = self.extras.get_mut("required") {
+            required.sort_by_cached_key(&mut key);
+            required.dedup();
+        }
+        match &mut self._type {
+            Some(crate::SchemaType::Multiple(types)) => {
+                types.sort_by_cached_key(|name| key(&Value::String(name.clone())));
+                types.dedup();
+            }
+            Some(crate::SchemaType::Single(_)) => {}
+            None => {
+                if let Some(Value::Array(types)) = self.extras.get_mut("type") {
+                    types.sort_by_cached_key(key);
+                    types.dedup();
+                }
+            }
+        }
+    }
+}
+
+fn retain_raw_names(value: &mut Value, keep: &mut impl FnMut(&str) -> bool) {
+    if let Value::Array(names) = value {
+        names.retain(|value| value.as_str().is_none_or(&mut *keep));
+    }
+}
+
 /// The structural shape declared for a schema keyword, independent of its value.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum SchemaKeywordKind {

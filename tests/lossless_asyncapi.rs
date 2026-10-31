@@ -77,6 +77,156 @@ fn structural_owners_preserve_deferred_shapes_and_borrow_nested_targets() {
     );
 }
 
+#[test]
+fn selected_metadata_preserves_partition_copy_and_first_value_patch_semantics() {
+    let source = json!({
+        "bindings":{"ws":{"bindingVersion":null}}, "externalDocs":null,
+        "tags":[], "correlationId":{"location":"$message.header#/id"},
+        "title":{"literal":null}, "x-owner":true
+    });
+    let mut remaining = source.as_object().unwrap().clone();
+    let owner = Metadata::take_from(&mut remaining, |key| key != "correlationId");
+    assert_eq!(
+        remaining,
+        json!({
+            "correlationId":{"location":"$message.header#/id"},
+            "title":{"literal":null}, "x-owner":true
+        })
+        .as_object()
+        .unwrap()
+        .clone()
+    );
+    assert!(owner.extras.is_empty());
+    for key in ["bindings", "tags", "externalDocs", "correlationId"] {
+        assert!(Metadata::owns_keyword(key));
+    }
+    assert!(!Metadata::owns_keyword("title"));
+    let mut target = Metadata::default();
+    let mut policy = Patch::default();
+    target
+        .copy_keyword_from("externalDocs", &owner, &mut policy)
+        .unwrap();
+    assert!(matches!(
+        target.external_docs,
+        Field::Invalid(serde_json::Value::Null)
+    ));
+    assert!(policy.keys.is_empty());
+    target
+        .patch_or_insert_keyword_from("bindings", &owner, &mut policy)
+        .unwrap();
+    assert_eq!(
+        serde_json::to_value(&target.bindings).unwrap(),
+        source["bindings"]
+    );
+    assert_eq!(policy.keys, ["bindings"]);
+    let patch =
+        Metadata::decode(json!({"bindings":{"ws":{"bindingVersion":null,"x-literal":null}}}))
+            .unwrap();
+    target
+        .patch_or_insert_keyword_from("bindings", &patch, &mut policy)
+        .unwrap();
+    assert_eq!(
+        serde_json::to_value(&target.bindings).unwrap(),
+        json!({"ws":{"x-literal":null}})
+    );
+    assert_eq!(
+        policy.keys,
+        ["bindings", "bindings", "ws", "bindingVersion", "x-literal"]
+    );
+    let delete = Metadata::decode(json!({"externalDocs":null})).unwrap();
+    target
+        .patch_or_insert_keyword_from("externalDocs", &delete, &mut policy)
+        .unwrap();
+    assert!(target.external_docs.is_missing());
+    let before = serde_json::to_value(&target).unwrap();
+    let keys = policy.keys.clone();
+    target
+        .copy_keyword_from("correlationId", &owner, &mut policy)
+        .unwrap();
+    target
+        .patch_or_insert_keyword_from("correlationId", &owner, &mut policy)
+        .unwrap();
+    target
+        .patch_or_insert_keyword_from("title", &owner, &mut policy)
+        .unwrap();
+    assert_eq!(serde_json::to_value(&target).unwrap(), before);
+    assert_eq!(policy.keys, keys);
+    assert_eq!(
+        serde_json::to_value(&owner).unwrap(),
+        json!({
+            "bindings":{"ws":{"bindingVersion":null}}, "externalDocs":null, "tags":[]
+        })
+    );
+
+    let mut fields = json!({"parameters":{"Room":{"description":null}},"tags":{},"schemas":{"Text":true},"x-owner":true}).as_object().unwrap().clone();
+    let components = Components::take_from(&mut fields, |_| true);
+    assert_eq!(
+        serde_json::to_value(components).unwrap(),
+        json!({"parameters":{"Room":{"description":null}},"tags":{}})
+    );
+    assert_eq!(
+        fields,
+        json!({"schemas":{"Text":true},"x-owner":true})
+            .as_object()
+            .unwrap()
+            .clone()
+    );
+}
+
+#[test]
+fn component_rekey_moves_values_and_rejects_invalid_containers_atomically() {
+    let mut target =
+        Components::decode(json!({"tags":{"same":{"name":"old"}},"x-target":true})).unwrap();
+    let source = Components::decode(json!({
+        "parameters":{}, "tags":{"a":{"name":"first"},"b":null},
+        "externalDocs":{"guide":{"url":"/guide"}}
+    }))
+    .unwrap();
+    let mut visited = Vec::new();
+    target
+        .append_rekeyed(source, |group, name| {
+            visited.push((group.to_owned(), name));
+            "same".into()
+        })
+        .unwrap();
+    assert_eq!(
+        visited,
+        [
+            ("tags".into(), "a".into()),
+            ("tags".into(), "b".into()),
+            ("externalDocs".into(), "guide".into())
+        ]
+    );
+    assert_eq!(
+        serde_json::to_value(&target).unwrap(),
+        json!({
+            "tags":{"same":null}, "externalDocs":{"same":{"url":"/guide"}}, "x-target":true
+        })
+    );
+    let before = serde_json::to_value(&target).unwrap();
+    for source in [
+        json!({"tags":{"a":{"name":"new"}},"externalDocs":null}),
+        json!({"x-source":true}),
+    ] {
+        assert!(target
+            .append_rekeyed(Components::decode(source).unwrap(), |_, _| panic!(
+                "invalid source must not invoke rename"
+            ))
+            .is_err());
+        assert_eq!(serde_json::to_value(&target).unwrap(), before);
+    }
+    let mut invalid_target = Components::decode(json!({"parameters":7})).unwrap();
+    assert!(invalid_target
+        .append_rekeyed(Components::default(), |_, _| panic!(
+            "invalid target must not invoke rename"
+        ))
+        .is_err());
+    assert_eq!(
+        serde_json::to_value(invalid_target).unwrap(),
+        json!({"parameters":7})
+    );
+}
+
 #[derive(Default)]
 struct Patch {
     keys: Vec<String>,

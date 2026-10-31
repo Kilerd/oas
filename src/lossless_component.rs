@@ -136,6 +136,85 @@ pub type List<T> = Vec<Field<T>>;
 // A single field declaration drives storage, decoding and serialization. Known
 // fields never also live in extras. Collection entries decode independently.
 macro_rules! node {
+    (metadata_collections $name:ident { $($field:ident : Fields<$ty:ty> => $key:literal),* $(,)? }) => {
+        node!(metadata_partition $name { $($field : Fields<$ty> => $key),* });
+        impl $name {
+            /// Consume and append declared collections under caller-selected names.
+            /// Reject malformed source/target containers and source extras before any
+            /// target mutation or callback. Individual invalid entries remain lossless.
+            /// Empty/missing source groups do not create target groups. Names are visited
+            /// in lexical order within each declared group; later collisions replace.
+            /// Target extras are untouched. An error leaves the target unchanged.
+            pub fn append_rekeyed(&mut self, source: Self, mut rename: impl FnMut(&str, String) -> String) -> Result<(), serde_json::Error> {
+                if !source.extras.is_empty() $(|| matches!(source.$field, Field::Invalid(_))
+                    || matches!(self.$field, Field::Invalid(_)))* {
+                    return Err(<serde_json::Error as serde::de::Error>::custom("expected component collections without source extras"));
+                }
+                $(if let Field::Value(values) = source.$field {
+                    if !values.is_empty() {
+                        if self.$field.is_missing() { self.$field = Field::Value(BTreeMap::new()); }
+                        if let Field::Value(target) = &mut self.$field {
+                            for (name, value) in values { target.insert(rename($key, name), value); }
+                        }
+                    }
+                })*
+                Ok(())
+            }
+        }
+    };
+    (metadata_selected $name:ident { $($field:ident : $ty:ty => $key:literal),* $(,)? }) => {
+        node!(metadata_partition $name { $($field : $ty => $key),* });
+        impl $name {
+            /// Whether this owner declares the keyword, independently of its presence.
+            pub fn owns_keyword(key: &str) -> bool {
+                matches!(key, $($key)|*)
+            }
+
+            /// Copy one present declared keyword literally, including null. Only the
+            /// replacement is charged; the caller owns any key charge.
+            pub fn copy_keyword_from<P: MetadataPatch>(&mut self, key: &str, source: &Self, policy: &mut P) -> Result<(), P::Error> {
+                match key {
+                    $($key if !source.$field.is_missing() => {
+                        metadata::field(&mut self.$field, &source.$field, true, policy)?;
+                        self.extras.remove(key);
+                    },)*
+                    _ => {},
+                }
+                Ok(())
+            }
+
+            /// Patch one present declared keyword, copying its first non-null value
+            /// literally. Later values use the usual recursive/null policy. The key
+            /// is charged before its value; missing or undeclared keys do nothing.
+            pub fn patch_or_insert_keyword_from<P: MetadataPatch>(&mut self, key: &str, patch: &Self, policy: &mut P) -> Result<(), P::Error> {
+                match key {
+                    $($key if !patch.$field.is_missing() => {
+                        let literal = policy.key(key)? || (self.$field.is_missing()
+                            && !matches!(patch.$field, Field::Invalid(Value::Null)));
+                        metadata::field(&mut self.$field, &patch.$field, literal, policy)?;
+                        self.extras.remove(key);
+                    },)*
+                    _ => {},
+                }
+                Ok(())
+            }
+        }
+    };
+    (metadata_partition $name:ident { $($field:ident : $ty:ty => $key:literal),* $(,)? }) => {
+        node!(metadata_access $name { $($field : $ty => $key),* });
+        impl $name {
+            /// Move accepted declared fields out of a source object. Rejected and
+            /// unknown keys remain in the source; the returned extras map is empty.
+            pub fn take_from(fields: &mut serde_json::Map<String, Value>, mut include: impl FnMut(&str) -> bool) -> Self {
+                Self {
+                    $($field: if include($key) {
+                        fields.remove($key).map(Field::from_value).unwrap_or_default()
+                    } else { Field::Missing },)*
+                    ..Self::default()
+                }
+            }
+        }
+    };
     (metadata_access $name:ident { $($field:ident : $ty:ty => $key:literal),* $(,)? }) => {
         node!(metadata $name { $($field : $ty => $key),* });
         impl $name {
