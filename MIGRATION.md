@@ -101,10 +101,32 @@ children only. `keyword_count()` counts present serialized entries without
 serializing payloads; with the feature disabled, typed/extra collisions retain
 the existing duplicate-entry behavior and should be avoided.
 
-Consumers that isolate failures per operation must select the relevant subtree
-before parsing it. Eagerly parsing a complete document can reject unrelated
-operations, and pruning private fields after parsing can reject content that was
-previously removed first. This release does not supply deferred document parsing.
+Consumers that isolate failures per operation can use the feature-gated
+`lossless_component` model. Its `Field<T>` distinguishes missing, typed, and
+malformed values without rejecting unrelated fields. Select and edit the operation
+before consuming it through `Operation::admit`; ordinary model deserialization
+continues to enforce the existing admission rules.
+
+`SchemaValue::from_lossless_value` retains malformed structural children as
+`SchemaValue::Invalid`; exhaustive matches must handle this feature-gated variant.
+The method still rejects a non-object, non-boolean root. Use `admit_legacy_root`
+when the selected root must satisfy the older typed-boundary rules. Structural
+field views expose both typed children and malformed fields; callers retain
+control of dialect policy, recursion limits, reference resolution, and diagnostics.
+`remove_keyword` removes both a typed keyword and its retained fallback.
+
+The feature also exports `lossless_asyncapi` owners for parameters, correlations,
+WebSocket bindings, tags, documentation, and their component collections. Borrowed
+and mutable node views traverse structural fields without serializing or cloning
+owners; examples and unknown vocabulary remain literal JSON. These types do not
+validate complete AsyncAPI documents or resolve references. `MetadataPatch` lets
+consumers define work charges, literal-field handling, and schema merge policy;
+`patch_keyword_from` applies one present field when callers need to interleave
+metadata with other fields.
+
+`json_pointer::tokens` and `json_pointer::escape` handle RFC 6901 string-form
+pointers and tokens. URI fragment decoding, array-index admission, and target
+lookup remain the caller's responsibility. They do not fetch external content.
 
 Use `SchemaValue` for schema deserialization. `Referenceable<Schema>` remains a
 legacy compatibility type: inline parse failures can select a Reference Object,

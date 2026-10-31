@@ -574,19 +574,22 @@ pub struct Responses {
     pub extras: BTreeMap<String, Any>,
 }
 
+pub(crate) fn is_response_status(key: &str) -> bool {
+    let bytes = key.as_bytes();
+    bytes.len() == 3
+        && (b'1'..=b'5').contains(&bytes[0])
+        && (bytes[1..] == *b"XX" || bytes[1..].iter().all(u8::is_ascii_digit))
+}
+
 impl<'de> Deserialize<'de> for Responses {
     fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
         let fields = BTreeMap::<String, Any>::deserialize(deserializer)?;
         let mut responses = Self::new();
         for (key, value) in fields {
-            let bytes = key.as_bytes();
             if key == "default" {
                 responses.default =
                     serde_json::from_value(value).map_err(serde::de::Error::custom)?;
-            } else if bytes.len() == 3
-                && (b'1'..=b'5').contains(&bytes[0])
-                && (bytes[1..] == *b"XX" || bytes[1..].iter().all(u8::is_ascii_digit))
-            {
+            } else if is_response_status(&key) {
                 responses.data.insert(
                     key,
                     serde_json::from_value(value).map_err(serde::de::Error::custom)?,
@@ -809,6 +812,10 @@ impl From<Vec<String>> for SchemaType {
 pub enum SchemaValue {
     Boolean(bool),
     Object(Box<Schema>),
+    /// A malformed structural child retained by lossless decoding.
+    #[cfg(feature = "lossless-schema-keywords")]
+    #[serde(skip_deserializing)]
+    Invalid(Any),
 }
 
 impl SchemaValue {
@@ -816,6 +823,8 @@ impl SchemaValue {
         match self {
             Self::Object(schema) => Some(schema),
             Self::Boolean(_) => None,
+            #[cfg(feature = "lossless-schema-keywords")]
+            Self::Invalid(_) => None,
         }
     }
 
@@ -823,6 +832,8 @@ impl SchemaValue {
         match self {
             Self::Object(schema) => Some(schema),
             Self::Boolean(_) => None,
+            #[cfg(feature = "lossless-schema-keywords")]
+            Self::Invalid(_) => None,
         }
     }
 }
@@ -847,9 +858,17 @@ impl From<bool> for SchemaValue {
 
 impl From<Reference> for SchemaValue {
     fn from(reference: Reference) -> Self {
-        // Promote schema fields only when their wire values survive unchanged;
-        // otherwise this infallible conversion must retain arbitrary siblings.
         let siblings = Any::Object(reference.extras.into_iter().collect());
+        #[cfg(feature = "lossless-schema-keywords")]
+        let mut schema = match SchemaValue::from_lossless_value(siblings)
+            .expect("reference siblings are an object")
+        {
+            SchemaValue::Object(schema) => *schema,
+            _ => unreachable!("reference siblings are an object"),
+        };
+        // Strict schemas cannot retain malformed known fields alongside typed ones.
+        // Only promote when serialization preserves the arbitrary reference siblings.
+        #[cfg(not(feature = "lossless-schema-keywords"))]
         let mut schema = Schema::deserialize(&siblings)
             .ok()
             .filter(|schema| serde_json::to_value(schema).ok().as_ref() == Some(&siblings))
@@ -919,6 +938,18 @@ pub struct Schema {
     pub content_encoding: Option<String>,
     /// Schema describing decoded string content. Does not change the wire type.
     pub content_schema: Option<Box<SchemaValue>>,
+    /// Native schema wrapper marker, retained without interpreting its media type.
+    #[cfg(feature = "lossless-schema-keywords")]
+    pub schema_format: Option<String>,
+    /// Wrapped schema when a `schemaFormat` marker is present.
+    #[cfg(feature = "lossless-schema-keywords")]
+    pub schema: Option<Box<SchemaValue>>,
+    /// Documentation metadata, retaining missing and malformed fields individually.
+    #[cfg(feature = "lossless-schema-keywords")]
+    pub external_docs: Option<crate::lossless_component::ExternalDocumentation>,
+    /// Discriminator metadata; mapping entries retain their original field states.
+    #[cfg(feature = "lossless-schema-keywords")]
+    pub discriminator: Option<crate::lossless_component::Discriminator>,
     #[cfg_attr(
         not(feature = "lossless-schema-keywords"),
         serde(default, deserialize_with = "crate::schema::present")
