@@ -40,6 +40,40 @@ fn compatibility_inputs() -> Vec<Value> {
 }
 
 #[test]
+fn untyped_schema_entry_preserves_root_and_nested_legacy_fields() {
+    for input in compatibility_inputs().into_iter().chain([
+        json!(true),
+        json!(false),
+        json!({"type":null,"description":null,"required":[]}),
+        json!({"type":7,"contentSchema":{"type":null}}),
+    ]) {
+        let parsed = SchemaValue::from_lossless_value(input.clone()).unwrap();
+        assert_eq!(serde_json::to_value(&parsed).unwrap(), input);
+    }
+    let mut parsed = SchemaValue::from_lossless_value(json!({
+        "type":null,"required":["name"],"properties":{"name":{"type":"string"}}
+    }))
+    .unwrap();
+    let schema = parsed.as_object_mut().unwrap();
+    assert_eq!(schema.extras["type"], Value::Null);
+    assert_eq!(schema.required.as_deref(), Some(["name".into()].as_slice()));
+    schema
+        .properties
+        .as_mut()
+        .unwrap()
+        .insert("name".into(), false.into());
+    assert_eq!(
+        serde_json::to_value(parsed).unwrap(),
+        json!({
+            "type":null,"required":["name"],"properties":{"name":false}
+        })
+    );
+    for input in [Value::Null, json!([]), json!("string"), json!(1)] {
+        assert!(SchemaValue::from_lossless_value(input).is_err());
+    }
+}
+
+#[test]
 fn embedded_operation_schemas_keep_the_old_admission_and_output() {
     for schema in compatibility_inputs() {
         let input = operation(schema.clone());
