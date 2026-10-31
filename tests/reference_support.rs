@@ -212,6 +212,29 @@ fn schema_conversion_preserves_reference_siblings_that_cannot_be_promoted_lossle
     }
 }
 
+#[cfg(feature = "lossless-schema-keywords")]
+#[test]
+fn reference_conversion_promotes_valid_fields_beside_opaque_siblings() {
+    let input = json!({
+        "$ref": "#/components/schemas/Message",
+        "format": null,
+        "properties": {"event": {"type": "string"}},
+        "contentSchema": {"type": null}
+    });
+    let reference: Reference = serde_json::from_value(input.clone()).unwrap();
+    let mut converted: SchemaValue = reference.into();
+    assert_eq!(serde_json::to_value(&converted).unwrap(), input);
+    let schema = converted.as_object_mut().unwrap();
+    schema
+        .properties
+        .as_mut()
+        .unwrap()
+        .insert("event".into(), false.into());
+    let mut expected = input;
+    expected["properties"]["event"] = json!(false);
+    assert_eq!(serde_json::to_value(converted).unwrap(), expected);
+}
+
 /// Adding reference metadata must not change existing constructors' serialized bytes.
 #[test]
 fn constructors_keep_pure_reference_wire_format() {

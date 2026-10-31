@@ -2,8 +2,13 @@
 use crate::{Schema, SchemaDependency, SchemaItems, SchemaValue};
 use serde::{Deserialize, Deserializer, Serialize};
 
+pub(crate) mod fields;
+use fields::schema_fields;
+
 #[cfg(feature = "lossless-schema-keywords")]
 mod lossless;
+#[cfg(feature = "lossless-schema-keywords")]
+pub use lossless::{OwnedSchemaField, SchemaField, SchemaFieldMut, SchemaKeywordKind};
 
 /// A nonnegative integer count, retaining integer-valued JSON number forms.
 ///
@@ -57,53 +62,184 @@ where
     T::deserialize(deserializer).map(Some)
 }
 
-impl Schema {
-    /// Count present keyword entries, including extras and explicitly empty collections.
+// Child shapes are shared by all vocabulary entries of the same kind. Scalars,
+// metadata and literal payloads have no schema child to visit or look up.
+macro_rules! visit_typed_children {
+    (legacy_child, $($args:tt)*) => { visit_typed_children!(child, $($args)*) };
+    (child, $field:expr, $key:expr, $visit:ident, $iter:ident, $values:ident, $borrow:ident) => {
+        visit_children($key, $field.$iter().map(Box::$borrow), &mut $visit)?;
+    };
+    (schema_map, $field:expr, $key:expr, $visit:ident, $iter:ident, $values:ident, $borrow:ident) => {
+        visit_children($key, $field.$iter().flat_map(|map| map.$values()), &mut $visit)?;
+    };
+    (schema_array, $field:expr, $key:expr, $visit:ident, $iter:ident, $values:ident, $borrow:ident) => {
+        visit_children($key, $field.$iter().flatten(), &mut $visit)?;
+    };
+    (items, $field:expr, $key:expr, $visit:ident, $iter:ident, $values:ident, $borrow:ident) => {
+        match $field.$borrow() {
+            Some(SchemaItems::Schema(child)) => $visit($key, child)?,
+            Some(SchemaItems::Tuple(children)) => visit_children($key, children, &mut $visit)?,
+            None => {}
+        }
+    };
+    (dependencies, $field:expr, $key:expr, $visit:ident, $iter:ident, $values:ident, $borrow:ident) => {
+        visit_children($key, $field.$iter().flat_map(|map| map.$values()).filter_map(|dependency| {
+            match dependency {
+                SchemaDependency::Schema(child) => Some(child.$borrow()),
+                SchemaDependency::Required(_) => None,
+            }
+        }), &mut $visit)?;
+    };
+    ($other:ident, $($args:tt)*) => {};
+}
+
+macro_rules! schema_child {
+    (legacy_child, $($args:tt)*) => { schema_child!(child, $($args)*) };
+    (child, $field:expr, $tail:ident) => {
+        $field.as_deref().map(|child| (child, $tail))
+    };
+    (schema_map, $field:expr, $tail:ident) => {{
+        let (key, rest) = $tail.split_first()?;
+        Some(($field.as_ref()?.get(key.as_ref())?, rest))
+    }};
+    (schema_array, $field:expr, $tail:ident) => {{
+        let (index, rest) = $tail.split_first()?;
+        Some(($field.as_ref()?.get(index.as_ref().parse::<usize>().ok()?)?, rest))
+    }};
+    (items, $field:expr, $tail:ident) => {
+        match $field.as_ref()? {
+            SchemaItems::Schema(child) => Some((child.as_ref(), $tail)),
+            SchemaItems::Tuple(children) => {
+                let (index, rest) = $tail.split_first()?;
+                Some((children.get(index.as_ref().parse::<usize>().ok()?)?, rest))
+            }
+        }
+    };
+    (dependencies, $field:expr, $tail:ident) => {{
+        let (key, rest) = $tail.split_first()?;
+        match $field.as_ref()?.get(key.as_ref())? {
+            SchemaDependency::Schema(child) => Some((child.as_ref(), rest)),
+            SchemaDependency::Required(_) => None,
+        }
+    }};
+    ($other:ident, $($args:tt)*) => { None };
+}
+
+macro_rules! implement_schema_access {
+    (legacy { $($old:ident => $old_key:literal: $old_kind:ident),* }
+     structural { $($(#[$attr:meta])* $field:ident => $key:literal: $kind:ident),* }) => {
+        implement_schema_access!(@fields
+            $($old => $old_key: $old_kind,)*
+            $($(#[$attr])* $field => $key: $kind,)*
+        );
+    };
+    (@fields $($(#[$attr:meta])* $field:ident => $key:literal: $kind:ident,)*) => {
+        impl Schema {
+            fn child_at_tokens<'a, 't, T: AsRef<str>>(
+                &'a self,
+                keyword: &str,
+                tail: &'t [T],
+            ) -> Option<(&'a SchemaValue, &'t [T])> {
+                if !self.is_schema_child_keyword(keyword) { return None; }
+                match keyword {
+                    $($(#[$attr])* $key => schema_child!($kind, self.$field, tail),)*
+                    _ => None,
+                }
+            }
+
+            /// Count present entries, including extras and explicitly empty collections.
+            /// Typed and extra entries count separately, as in the derived serializer.
+            #[cfg(not(feature = "lossless-schema-keywords"))]
+            pub fn keyword_count(&self) -> usize {
+                self.extras.len() + [ $($(#[$attr])* self.$field.is_some(),)* ]
+                    .into_iter().filter(|present| *present).count()
+            }
+
+            /// Borrow immediate schema children in lexical keyword order, stopping on error.
+            /// Map keys are lexical and arrays retain their order. Literal payloads and
+            /// lossless fallback fields are skipped; this does not recurse or resolve references.
+            pub fn try_for_each_child_with_keyword<E>(
+                &self,
+                mut visit: impl FnMut(&'static str, &SchemaValue) -> Result<(), E>,
+            ) -> Result<(), E> {
+                let mut keywords = [$($(#[$attr])* $key,)*];
+                keywords.sort_unstable();
+                for keyword in keywords {
+                    if !self.is_schema_child_keyword(keyword) { continue; }
+                    match keyword {
+                        $($(#[$attr])* $key => {
+                            visit_typed_children!($kind, self.$field, $key, visit, iter, values, as_ref);
+                        },)*
+                        _ => unreachable!("keyword comes from the schema vocabulary"),
+                    }
+                }
+                Ok(())
+            }
+
+            /// Visit immediate children with their containing keyword, in lexical order.
+            /// Array children retain their order. An error leaves prior edits in place.
+            /// This does not recurse, resolve references or visit literal/fallback values.
+            pub fn try_for_each_child_mut_with_keyword<E>(
+                &mut self,
+                mut visit: impl FnMut(&'static str, &mut SchemaValue) -> Result<(), E>,
+            ) -> Result<(), E> {
+                let mut keywords = [$($(#[$attr])* $key,)*];
+                keywords.sort_unstable();
+                for keyword in keywords {
+                    if !self.is_schema_child_keyword(keyword) { continue; }
+                    match keyword {
+                        $($(#[$attr])* $key => {
+                            visit_typed_children!($kind, self.$field, $key, visit, iter_mut, values_mut, as_mut);
+                        },)*
+                        _ => unreachable!("keyword comes from the schema vocabulary"),
+                    }
+                }
+                Ok(())
+            }
+        }
+
+        #[cfg(feature = "lossless-schema-keywords")]
+        impl crate::HeapSize for Schema {
+            fn heap_size(&self) -> usize {
+                let mut size = crate::HeapSize::heap_size(&self.extras);
+                $($(#[$attr])* {
+                    size = size.saturating_add(crate::HeapSize::heap_size(&self.$field));
+                })*
+                size
+            }
+        }
+    };
+}
+schema_fields!(implement_schema_access);
+
+impl SchemaValue {
+    /// Borrow a structural schema descendant using already decoded path tokens.
     ///
-    /// Does not visit children or serialize payloads. In strict mode, duplicate
-    /// typed and extra entries count separately, as in its derived serializer.
-    /// With `lossless-schema-keywords`, a typed field shadows the matching extra.
-    #[cfg(not(feature = "lossless-schema-keywords"))]
-    pub fn keyword_count(&self) -> usize {
-        self.extras.len()
-            + [
-                self._type.is_some(),
-                self._ref.is_some(),
-                self.format.is_some(),
-                self.nullable.is_some(),
-                self.description.is_some(),
-                self.content_media_type.is_some(),
-                self.content_encoding.is_some(),
-                self.content_schema.is_some(),
-                self.properties.is_some(),
-                self.pattern_properties.is_some(),
-                self.required.is_some(),
-                self.min_properties.is_some(),
-                self.max_properties.is_some(),
-                self.additional_properties.is_some(),
-                self.unevaluated_properties.is_some(),
-                self.property_names.is_some(),
-                self.all_of.is_some(),
-                self.any_of.is_some(),
-                self.one_of.is_some(),
-                self.not.is_some(),
-                self.if_schema.is_some(),
-                self.then_schema.is_some(),
-                self.else_schema.is_some(),
-                self.dependent_required.is_some(),
-                self.dependent_schemas.is_some(),
-                self.dependencies.is_some(),
-                self.defs.is_some(),
-                self.definitions.is_some(),
-                self.items.is_some(),
-                self.prefix_items.is_some(),
-                self.additional_items.is_some(),
-                self.unevaluated_items.is_some(),
-                self.contains.is_some(),
-            ]
-            .into_iter()
-            .filter(|present| *present)
-            .count()
+    /// An empty path returns this schema. Map keys are used verbatim; array tokens
+    /// parse as `usize`. Literal payloads, unknown vocabulary and malformed fields
+    /// retained in lossless extras are not schema children. This does not decode a
+    /// JSON Pointer, follow references, or traverse an external document.
+    pub fn schema_at_tokens<T: AsRef<str>>(&self, tokens: &[T]) -> Option<&Self> {
+        let mut current = self;
+        let mut tokens = tokens;
+        while let Some((keyword, tail)) = tokens.split_first() {
+            let schema = current.as_object()?;
+            let (child, rest) = schema.child_at_tokens(keyword.as_ref(), tail)?;
+            current = child;
+            tokens = rest;
+        }
+        Some(current)
+    }
+}
+
+impl Schema {
+    fn is_schema_child_keyword(&self, keyword: &str) -> bool {
+        #[cfg(feature = "lossless-schema-keywords")]
+        if keyword == "schema" {
+            return self.schema_format.is_some() || self.extras.contains_key("schemaFormat");
+        }
+        let _ = keyword;
+        true
     }
 
     /// Visit immediate schema children in lexical keyword order, stopping on error.
@@ -118,124 +254,12 @@ impl Schema {
     ) -> Result<(), E> {
         self.try_for_each_child_mut_with_keyword(|_, child| visit(child))
     }
-
-    /// Visit immediate children with the keyword containing each child.
-    ///
-    /// Keywords and map keys are visited lexically; array children retain their
-    /// original order. The keyword lets callers select dialect-specific traversal.
-    /// Returning `Ok(())` without editing a child skips it. This does not recurse,
-    /// resolve references, or visit literal payloads and unknown vocabulary.
-    pub fn try_for_each_child_mut_with_keyword<E>(
-        &mut self,
-        mut visit: impl FnMut(&'static str, &mut SchemaValue) -> Result<(), E>,
-    ) -> Result<(), E> {
-        visit_children(
-            "$defs",
-            self.defs.iter_mut().flat_map(|m| m.values_mut()),
-            &mut visit,
-        )?;
-        visit_children(
-            "additionalItems",
-            self.additional_items.iter_mut().map(Box::as_mut),
-            &mut visit,
-        )?;
-        visit_children(
-            "additionalProperties",
-            self.additional_properties.iter_mut().map(Box::as_mut),
-            &mut visit,
-        )?;
-        visit_children("allOf", self.all_of.iter_mut().flatten(), &mut visit)?;
-        visit_children("anyOf", self.any_of.iter_mut().flatten(), &mut visit)?;
-        visit_children(
-            "contains",
-            self.contains.iter_mut().map(Box::as_mut),
-            &mut visit,
-        )?;
-        visit_children(
-            "contentSchema",
-            self.content_schema.iter_mut().map(Box::as_mut),
-            &mut visit,
-        )?;
-        visit_children(
-            "definitions",
-            self.definitions.iter_mut().flat_map(|m| m.values_mut()),
-            &mut visit,
-        )?;
-        visit_children(
-            "dependencies",
-            self.dependencies
-                .iter_mut()
-                .flat_map(|m| m.values_mut())
-                .filter_map(|dependency| match dependency {
-                    SchemaDependency::Schema(child) => Some(child.as_mut()),
-                    SchemaDependency::Required(_) => None,
-                }),
-            &mut visit,
-        )?;
-        visit_children(
-            "dependentSchemas",
-            self.dependent_schemas
-                .iter_mut()
-                .flat_map(|m| m.values_mut()),
-            &mut visit,
-        )?;
-        visit_children(
-            "else",
-            self.else_schema.iter_mut().map(Box::as_mut),
-            &mut visit,
-        )?;
-        visit_children("if", self.if_schema.iter_mut().map(Box::as_mut), &mut visit)?;
-        match &mut self.items {
-            Some(SchemaItems::Schema(child)) => visit("items", child)?,
-            Some(SchemaItems::Tuple(children)) => visit_children("items", children, &mut visit)?,
-            None => {}
-        }
-        visit_children("not", self.not.iter_mut().map(Box::as_mut), &mut visit)?;
-        visit_children("oneOf", self.one_of.iter_mut().flatten(), &mut visit)?;
-        visit_children(
-            "patternProperties",
-            self.pattern_properties
-                .iter_mut()
-                .flat_map(|m| m.values_mut()),
-            &mut visit,
-        )?;
-        visit_children(
-            "prefixItems",
-            self.prefix_items.iter_mut().flatten(),
-            &mut visit,
-        )?;
-        visit_children(
-            "properties",
-            self.properties.iter_mut().flat_map(|m| m.values_mut()),
-            &mut visit,
-        )?;
-        visit_children(
-            "propertyNames",
-            self.property_names.iter_mut().map(Box::as_mut),
-            &mut visit,
-        )?;
-        visit_children(
-            "then",
-            self.then_schema.iter_mut().map(Box::as_mut),
-            &mut visit,
-        )?;
-        visit_children(
-            "unevaluatedItems",
-            self.unevaluated_items.iter_mut().map(Box::as_mut),
-            &mut visit,
-        )?;
-        visit_children(
-            "unevaluatedProperties",
-            self.unevaluated_properties.iter_mut().map(Box::as_mut),
-            &mut visit,
-        )
-    }
 }
 
-fn visit_children<'a, E>(
+fn visit_children<T, E>(
     keyword: &'static str,
-    children: impl IntoIterator<Item = &'a mut SchemaValue>,
-    visit: &mut impl FnMut(&'static str, &mut SchemaValue) -> Result<(), E>,
+    children: impl IntoIterator<Item = T>,
+    visit: &mut impl FnMut(&'static str, T) -> Result<(), E>,
 ) -> Result<(), E> {
     for child in children {
         visit(keyword, child)?;

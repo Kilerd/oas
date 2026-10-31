@@ -82,6 +82,58 @@ fn typed_edits_preserve_unknown_keywords_and_literal_payloads() {
 }
 
 #[test]
+fn borrowed_schema_paths_preserve_structure_and_exclude_literals() {
+    let schema: SchemaValue = serde_json::from_value(json!({
+        "properties": {"a/b~": {"items": [{"type":"string"}, false]}},
+        "dependencies": {"schema": {"allOf": [true]}, "names": ["event"]},
+        "default": {"properties": {"literal": true}},
+        "x-template": {"items": false}
+    }))
+    .unwrap();
+    for (path, expected) in [
+        (
+            vec!["properties", "a/b~", "items", "0"],
+            json!({"type":"string"}),
+        ),
+        (vec!["properties", "a/b~", "items", "1"], json!(false)),
+        (vec!["dependencies", "schema", "allOf", "0"], json!(true)),
+    ] {
+        assert_eq!(
+            serde_json::to_value(schema.schema_at_tokens(&path).unwrap()).unwrap(),
+            expected
+        );
+    }
+    for path in [
+        vec!["default", "properties", "literal"],
+        vec!["x-template", "items"],
+        vec!["dependencies", "names", "0"],
+        vec!["properties", "missing"],
+    ] {
+        assert!(schema.schema_at_tokens(&path).is_none());
+    }
+    assert!(std::ptr::eq(
+        schema.schema_at_tokens::<&str>(&[]).unwrap(),
+        &schema
+    ));
+    let mut visited = Vec::new();
+    schema
+        .as_object()
+        .unwrap()
+        .try_for_each_child_with_keyword::<()>(|keyword, child| {
+            visited.push((keyword, serde_json::to_value(child).unwrap()));
+            Ok(())
+        })
+        .unwrap();
+    assert_eq!(
+        visited,
+        vec![
+            ("dependencies", json!({"allOf":[true]})),
+            ("properties", json!({"items":[{"type":"string"},false]})),
+        ]
+    );
+}
+
+#[test]
 fn integral_float_counts_keep_their_json_number_representation() {
     let schema: Schema =
         serde_json::from_str(r#"{"minProperties":1.0,"maxProperties":2e0}"#).unwrap();
@@ -179,6 +231,8 @@ fn traversal_edits_immediate_children_but_leaves_literal_data_and_grandchildren_
             match child {
                 SchemaValue::Boolean(value) => *value = !*value,
                 SchemaValue::Object(object) => object.description = Some("Visited".into()),
+                #[cfg(feature = "lossless-schema-keywords")]
+                SchemaValue::Invalid(_) => panic!("fixture contains only schema children"),
             }
             Ok(())
         })
