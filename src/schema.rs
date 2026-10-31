@@ -2,6 +2,9 @@
 use crate::{Schema, SchemaDependency, SchemaItems, SchemaValue};
 use serde::{Deserialize, Deserializer, Serialize};
 
+#[cfg(feature = "lossless-schema-keywords")]
+mod lossless;
+
 /// A nonnegative integer count, retaining integer-valued JSON number forms.
 ///
 /// Values are bounded by `u64`. `1.0` and `1e0` are accepted as integers; their
@@ -55,6 +58,54 @@ where
 }
 
 impl Schema {
+    /// Count present keyword entries, including extras and explicitly empty collections.
+    ///
+    /// Does not visit children or serialize payloads. In strict mode, duplicate
+    /// typed and extra entries count separately, as in its derived serializer.
+    /// With `lossless-schema-keywords`, a typed field shadows the matching extra.
+    #[cfg(not(feature = "lossless-schema-keywords"))]
+    pub fn keyword_count(&self) -> usize {
+        self.extras.len()
+            + [
+                self._type.is_some(),
+                self._ref.is_some(),
+                self.format.is_some(),
+                self.nullable.is_some(),
+                self.description.is_some(),
+                self.content_media_type.is_some(),
+                self.content_encoding.is_some(),
+                self.content_schema.is_some(),
+                self.properties.is_some(),
+                self.pattern_properties.is_some(),
+                self.required.is_some(),
+                self.min_properties.is_some(),
+                self.max_properties.is_some(),
+                self.additional_properties.is_some(),
+                self.unevaluated_properties.is_some(),
+                self.property_names.is_some(),
+                self.all_of.is_some(),
+                self.any_of.is_some(),
+                self.one_of.is_some(),
+                self.not.is_some(),
+                self.if_schema.is_some(),
+                self.then_schema.is_some(),
+                self.else_schema.is_some(),
+                self.dependent_required.is_some(),
+                self.dependent_schemas.is_some(),
+                self.dependencies.is_some(),
+                self.defs.is_some(),
+                self.definitions.is_some(),
+                self.items.is_some(),
+                self.prefix_items.is_some(),
+                self.additional_items.is_some(),
+                self.unevaluated_items.is_some(),
+                self.contains.is_some(),
+            ]
+            .into_iter()
+            .filter(|present| *present)
+            .count()
+    }
+
     /// Visit immediate schema children in lexical keyword order, stopping on error.
     ///
     /// This method does not recurse or follow `$ref`. The caller chooses whether to

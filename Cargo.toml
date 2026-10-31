@@ -7,6 +7,11 @@ license = "MIT"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
+[features]
+# Retain formerly opaque schema keywords while exposing losslessly typed values.
+# Cargo feature unification applies this policy to every consumer of this crate.
+lossless-schema-keywords = []
+
 [dependencies]
 either = "1.8.1"
 serde = { version = "1", features = ["derive"] }
