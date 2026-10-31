@@ -9,6 +9,10 @@ documentation = "https://docs.rs/oas/0.4.1-dev/oas/"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
+[features]
+default = []
+lossless-schema-keywords = []
+
 [dependencies]
 either = "1.8.1"
 serde = { version = "1", features = ["derive"] }

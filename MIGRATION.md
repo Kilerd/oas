@@ -93,6 +93,36 @@ Callers control recursion, work/depth limits, and reference resolution.
 The visitor never descends into literal data in `extras`; on error it stops and
 retains earlier edits. The method follows structural children only, not references.
 
+### Retaining formerly opaque schema keywords
+
+The optional `lossless-schema-keywords` Cargo feature exposes valid structural
+fields while retaining values that cannot be represented without changing them:
+
+```toml
+[dependencies]
+oas = { version = "=0.4.1-dev", features = ["lossless-schema-keywords"] }
+```
+
+This feature is available from the source revision containing this section; use
+that revision until a package containing it is released. It is disabled by default.
+Cargo feature unification applies the parsing policy to all uses of this crate in
+the dependency graph, including schemas embedded in `Operation` and `MediaType`.
+
+At positions already typed before structural fields were added, existing scalar
+errors and null elision remain unchanged. For example, root `type: 7` is rejected
+and root `description: null` disappears. Within a formerly opaque child such as
+`properties.name`, those same values remain in `extras` with the typed field empty.
+Valid object and boolean children become typed children; malformed structural
+containers remain intact in `extras`. Defaults, examples, and unknown vocabulary
+remain literal data. Retention does not establish schema validity.
+
+A typed assignment overrides an extra with the same keyword during serialization
+and `keyword_count()`. Clearing that assignment exposes the retained fallback;
+remove both entries to delete the keyword. The shallow child visitor visits typed
+children only. `keyword_count()` counts present serialized entries without
+serializing payloads; with the feature disabled, typed/extra collisions retain
+the existing duplicate-entry behavior and should be avoided.
+
 Consumers that isolate failures per operation must select the relevant subtree
 before parsing it. Eagerly parsing a complete document can reject unrelated
 operations, and pruning private fields after parsing can reject content that was

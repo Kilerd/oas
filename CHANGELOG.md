@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+- Optional `lossless-schema-keywords` parsing retains formerly opaque values while exposing valid typed fields, including schemas embedded in operations. Default parsing remains strict.
+- `Schema::keyword_count()` counts present entries without serializing child payloads. With the optional feature, typed fields override colliding extras in serialization and counting.
+
 ## [0.4.1-dev] - 2026-10-30
 
 ### Added

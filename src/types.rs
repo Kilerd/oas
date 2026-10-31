@@ -878,13 +878,27 @@ impl From<Referenceable<Schema>> for SchemaValue {
 /// Use [`SchemaValue`] where a schema may also be a boolean. Structural keywords
 /// have typed fields; unknown vocabulary and literal payloads remain in `extras`.
 /// This is a representation, not a JSON Schema validator or reference resolver.
-#[skip_serializing_none]
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
+///
+/// The opt-in `lossless-schema-keywords` feature retains malformed newly modeled
+/// keywords in `extras` and promotes valid fields without changing formerly opaque
+/// child values. Previously typed scalar positions retain their old admission.
+/// Typed assignments override matching extras during serialization and counting;
+/// clearing an assignment exposes any retained fallback again. Cargo feature
+/// unification applies this mode to all consumers of the crate.
+#[cfg_attr(not(feature = "lossless-schema-keywords"), skip_serializing_none)]
+#[derive(Debug, Clone, Default)]
+#[cfg_attr(
+    not(feature = "lossless-schema-keywords"),
+    derive(Serialize, Deserialize)
+)]
+#[cfg_attr(
+    not(feature = "lossless-schema-keywords"),
+    serde(rename_all = "camelCase")
+)]
 pub struct Schema {
-    #[serde(rename = "type")]
+    #[cfg_attr(not(feature = "lossless-schema-keywords"), serde(rename = "type"))]
     pub _type: Option<SchemaType>,
-    #[serde(rename = "$ref")]
+    #[cfg_attr(not(feature = "lossless-schema-keywords"), serde(rename = "$ref"))]
     pub _ref: Option<String>,
     pub format: Option<String>,
     /// Legacy OpenAPI 3.0 keyword, retained without automatic conversion.
@@ -897,59 +911,134 @@ pub struct Schema {
     pub content_encoding: Option<String>,
     /// Schema describing decoded string content. Does not change the wire type.
     pub content_schema: Option<Box<SchemaValue>>,
-    #[serde(default, deserialize_with = "crate::schema::present")]
+    #[cfg_attr(
+        not(feature = "lossless-schema-keywords"),
+        serde(default, deserialize_with = "crate::schema::present")
+    )]
     pub properties: Option<BTreeMap<String, SchemaValue>>,
-    #[serde(default, deserialize_with = "crate::schema::present")]
+    #[cfg_attr(
+        not(feature = "lossless-schema-keywords"),
+        serde(default, deserialize_with = "crate::schema::present")
+    )]
     pub pattern_properties: Option<BTreeMap<String, SchemaValue>>,
-    #[serde(default, deserialize_with = "crate::schema::present")]
+    #[cfg_attr(
+        not(feature = "lossless-schema-keywords"),
+        serde(default, deserialize_with = "crate::schema::present")
+    )]
     pub required: Option<Vec<String>>,
-    #[serde(default, deserialize_with = "crate::schema::present")]
+    #[cfg_attr(
+        not(feature = "lossless-schema-keywords"),
+        serde(default, deserialize_with = "crate::schema::present")
+    )]
     pub min_properties: Option<SchemaCount>,
-    #[serde(default, deserialize_with = "crate::schema::present")]
+    #[cfg_attr(
+        not(feature = "lossless-schema-keywords"),
+        serde(default, deserialize_with = "crate::schema::present")
+    )]
     pub max_properties: Option<SchemaCount>,
-    #[serde(default, deserialize_with = "crate::schema::present")]
+    #[cfg_attr(
+        not(feature = "lossless-schema-keywords"),
+        serde(default, deserialize_with = "crate::schema::present")
+    )]
     pub additional_properties: Option<Box<SchemaValue>>,
-    #[serde(default, deserialize_with = "crate::schema::present")]
+    #[cfg_attr(
+        not(feature = "lossless-schema-keywords"),
+        serde(default, deserialize_with = "crate::schema::present")
+    )]
     pub unevaluated_properties: Option<Box<SchemaValue>>,
-    #[serde(default, deserialize_with = "crate::schema::present")]
+    #[cfg_attr(
+        not(feature = "lossless-schema-keywords"),
+        serde(default, deserialize_with = "crate::schema::present")
+    )]
     pub property_names: Option<Box<SchemaValue>>,
-    #[serde(default, deserialize_with = "crate::schema::present")]
+    #[cfg_attr(
+        not(feature = "lossless-schema-keywords"),
+        serde(default, deserialize_with = "crate::schema::present")
+    )]
     pub all_of: Option<Vec<SchemaValue>>,
-    #[serde(default, deserialize_with = "crate::schema::present")]
+    #[cfg_attr(
+        not(feature = "lossless-schema-keywords"),
+        serde(default, deserialize_with = "crate::schema::present")
+    )]
     pub any_of: Option<Vec<SchemaValue>>,
-    #[serde(default, deserialize_with = "crate::schema::present")]
+    #[cfg_attr(
+        not(feature = "lossless-schema-keywords"),
+        serde(default, deserialize_with = "crate::schema::present")
+    )]
     pub one_of: Option<Vec<SchemaValue>>,
-    #[serde(default, deserialize_with = "crate::schema::present")]
+    #[cfg_attr(
+        not(feature = "lossless-schema-keywords"),
+        serde(default, deserialize_with = "crate::schema::present")
+    )]
     pub not: Option<Box<SchemaValue>>,
-    #[serde(rename = "if", default, deserialize_with = "crate::schema::present")]
+    #[cfg_attr(
+        not(feature = "lossless-schema-keywords"),
+        serde(rename = "if", default, deserialize_with = "crate::schema::present")
+    )]
     pub if_schema: Option<Box<SchemaValue>>,
-    #[serde(rename = "then", default, deserialize_with = "crate::schema::present")]
+    #[cfg_attr(
+        not(feature = "lossless-schema-keywords"),
+        serde(rename = "then", default, deserialize_with = "crate::schema::present")
+    )]
     pub then_schema: Option<Box<SchemaValue>>,
-    #[serde(rename = "else", default, deserialize_with = "crate::schema::present")]
+    #[cfg_attr(
+        not(feature = "lossless-schema-keywords"),
+        serde(rename = "else", default, deserialize_with = "crate::schema::present")
+    )]
     pub else_schema: Option<Box<SchemaValue>>,
-    #[serde(default, deserialize_with = "crate::schema::present")]
+    #[cfg_attr(
+        not(feature = "lossless-schema-keywords"),
+        serde(default, deserialize_with = "crate::schema::present")
+    )]
     pub dependent_required: Option<BTreeMap<String, Vec<String>>>,
-    #[serde(default, deserialize_with = "crate::schema::present")]
+    #[cfg_attr(
+        not(feature = "lossless-schema-keywords"),
+        serde(default, deserialize_with = "crate::schema::present")
+    )]
     pub dependent_schemas: Option<BTreeMap<String, SchemaValue>>,
     /// Legacy JSON Schema dependencies: property names or a schema.
-    #[serde(default, deserialize_with = "crate::schema::present")]
+    #[cfg_attr(
+        not(feature = "lossless-schema-keywords"),
+        serde(default, deserialize_with = "crate::schema::present")
+    )]
     pub dependencies: Option<BTreeMap<String, SchemaDependency>>,
-    #[serde(rename = "$defs", default, deserialize_with = "crate::schema::present")]
+    #[cfg_attr(
+        not(feature = "lossless-schema-keywords"),
+        serde(rename = "$defs", default, deserialize_with = "crate::schema::present")
+    )]
     pub defs: Option<BTreeMap<String, SchemaValue>>,
-    #[serde(default, deserialize_with = "crate::schema::present")]
+    #[cfg_attr(
+        not(feature = "lossless-schema-keywords"),
+        serde(default, deserialize_with = "crate::schema::present")
+    )]
     pub definitions: Option<BTreeMap<String, SchemaValue>>,
     /// A single schema, or a tuple of schemas in older JSON Schema dialects.
-    #[serde(default, deserialize_with = "crate::schema::present")]
+    #[cfg_attr(
+        not(feature = "lossless-schema-keywords"),
+        serde(default, deserialize_with = "crate::schema::present")
+    )]
     pub items: Option<SchemaItems>,
-    #[serde(default, deserialize_with = "crate::schema::present")]
+    #[cfg_attr(
+        not(feature = "lossless-schema-keywords"),
+        serde(default, deserialize_with = "crate::schema::present")
+    )]
     pub prefix_items: Option<Vec<SchemaValue>>,
-    #[serde(default, deserialize_with = "crate::schema::present")]
+    #[cfg_attr(
+        not(feature = "lossless-schema-keywords"),
+        serde(default, deserialize_with = "crate::schema::present")
+    )]
     pub additional_items: Option<Box<SchemaValue>>,
-    #[serde(default, deserialize_with = "crate::schema::present")]
+    #[cfg_attr(
+        not(feature = "lossless-schema-keywords"),
+        serde(default, deserialize_with = "crate::schema::present")
+    )]
     pub unevaluated_items: Option<Box<SchemaValue>>,
-    #[serde(default, deserialize_with = "crate::schema::present")]
+    #[cfg_attr(
+        not(feature = "lossless-schema-keywords"),
+        serde(default, deserialize_with = "crate::schema::present")
+    )]
     pub contains: Option<Box<SchemaValue>>,
-    #[serde(flatten)]
+    #[cfg_attr(not(feature = "lossless-schema-keywords"), serde(flatten))]
     pub extras: BTreeMap<String, Any>,
 }
 

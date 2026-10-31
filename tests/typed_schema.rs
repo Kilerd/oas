@@ -112,6 +112,7 @@ fn explicitly_empty_keywords_remain_present() {
     assert_eq!(serde_json::to_value(Schema::default()).unwrap(), json!({}));
 }
 
+#[cfg(not(feature = "lossless-schema-keywords"))]
 #[test]
 fn malformed_known_keywords_are_rejected_even_with_reference_siblings() {
     for invalid in [
@@ -323,4 +324,38 @@ fn count_access_keeps_representation_policy_separate_from_integer_value() {
     assert_eq!(integer.as_number().as_u64(), Some(2));
     assert_eq!(floating.as_number().as_u64(), None);
     assert_eq!(serde_json::to_value(&floating).unwrap(), json!(2.0));
+}
+
+#[test]
+fn keyword_count_matches_present_serialized_fields_without_counting_children() {
+    for value in [
+        json!({}),
+        json!({"$ref":"#/components/schemas/Item"}),
+        json!({"properties":{}, "required":[], "allOf":[], "minProperties":0,
+            "maxProperties":1, "default":null}),
+        json!({
+            "type":"object", "$ref":"#/components/schemas/Item", "format":"custom",
+            "nullable":false, "description":"item", "contentMediaType":"application/json",
+            "contentEncoding":"base64", "contentSchema":{"properties":{"nested":true}},
+            "properties":{"name":{"type":"string"}}, "patternProperties":{},
+            "required":[], "minProperties":0, "maxProperties":2,
+            "additionalProperties":false, "unevaluatedProperties":false, "propertyNames":true,
+            "allOf":[], "anyOf":[], "oneOf":[], "not":false, "if":true, "then":true,
+            "else":false, "dependentRequired":{}, "dependentSchemas":{}, "dependencies":{},
+            "$defs":{}, "definitions":{}, "items":true, "prefixItems":[], "additionalItems":true,
+            "unevaluatedItems":false, "contains":true, "x-display":{"nested":{"type":"badge"}}
+        }),
+    ] {
+        let schema: Schema = serde_json::from_value(value.clone()).unwrap();
+        assert_eq!(schema.keyword_count(), value.as_object().unwrap().len());
+        let serialized = serde_json::to_value(&schema).unwrap();
+        assert_eq!(
+            schema.keyword_count(),
+            serialized.as_object().unwrap().len()
+        );
+    }
+    let mut reference = Schema::reference("#/components/schemas/Item");
+    assert_eq!(reference.keyword_count(), 1);
+    reference.required = Some(Vec::new());
+    assert_eq!(reference.keyword_count(), 2);
 }

@@ -98,7 +98,9 @@ fields, and handle `SchemaValue::Boolean` separately. Structural keywords such a
 `properties`, `required`, `$defs`, and `anyOf` have typed fields. Unknown vocabulary
 and literal payloads remain in `Schema.extras`. Use `try_for_each_child_mut` to
 visit immediate schema children without traversing examples or defaults; callers
-control recursion and reference resolution. See the [migration guide](MIGRATION.md)
+control recursion and reference resolution. The unreleased optional
+`lossless-schema-keywords` feature retains formerly opaque values during typed
+edits; it is not included in the published `0.4.1-dev` package. See the [migration guide](MIGRATION.md)
 for the field-access changes and stricter parsing of these keywords.
 
 Other reusable OpenAPI objects use `Referenceable<T>` for inline data or references:
