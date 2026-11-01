@@ -86,6 +86,14 @@ that revision until a package containing it is released. It is disabled by defau
 Cargo feature unification applies the parsing policy to all uses of this crate in
 the dependency graph, including schemas embedded in `Operation` and `MediaType`.
 
+Enabling `lossless-schema-keywords` also adds four public `Schema` fields:
+`schema_format`, `schema`, `external_docs`, and `discriminator`. Complete struct
+literals must initialize these fields when the feature is enabled, or use
+`..Schema::default()` to remain compatible with either configuration. Exhaustive
+destructuring must likewise include these fields under the feature condition, or
+use `..` to ignore them. Cargo feature unification can enable these requirements
+through another dependency.
+
 At positions already typed before structural fields were added, existing scalar
 errors and null elision remain unchanged. For example, root `type: 7` is rejected
 and root `description: null` disappears. Within a formerly opaque child such as

@@ -246,6 +246,180 @@ impl MetadataPatch for Patch {
     }
 }
 
+struct RejectPatch {
+    callback: &'static str,
+    remaining: usize,
+}
+
+impl RejectPatch {
+    fn visit(&mut self, callback: &'static str) -> Result<(), &'static str> {
+        if self.callback == callback {
+            if self.remaining == 0 {
+                return Err(callback);
+            }
+            self.remaining -= 1;
+        }
+        Ok(())
+    }
+}
+
+impl MetadataPatch for RejectPatch {
+    type Error = &'static str;
+
+    fn key(&mut self, _: &str) -> Result<bool, Self::Error> {
+        self.visit("key")?;
+        Ok(false)
+    }
+
+    fn replacement(&mut self, _: &impl serde::Serialize) -> Result<(), Self::Error> {
+        self.visit("replacement")
+    }
+
+    fn raw(
+        &mut self,
+        target: &mut serde_json::Value,
+        patch: &serde_json::Value,
+    ) -> Result<(), Self::Error> {
+        self.visit("raw")?;
+        *target = patch.clone();
+        Ok(())
+    }
+}
+
+#[test]
+fn rejected_raw_metadata_patch_preserves_the_existing_field() {
+    for bindings in [json!({"ws":{"query":true}}), json!([7, null])] {
+        let before = json!({"bindings":bindings,"tags":[{"name":"keep"}]});
+        let mut target = Metadata::decode(before.clone()).unwrap();
+        let patch = Metadata::decode(json!({"bindings":7})).unwrap();
+        let result = target.patch_keyword_from(
+            "bindings",
+            &patch,
+            &mut RejectPatch {
+                callback: "raw",
+                remaining: 0,
+            },
+        );
+        let after = serde_json::to_value(&target).unwrap();
+        println!("raw metadata: before={before} result={result:?} after={after}");
+        assert_eq!(result, Err("raw"));
+        assert_eq!(after, before);
+    }
+}
+
+#[test]
+fn rejected_metadata_callbacks_preserve_siblings_and_earlier_edits() {
+    let before = json!({
+        "bindings":{"ws":{"headers":true,"query":true},"x-keep":[7,null]},
+        "tags":[{"name":"keep"}]
+    });
+    for (callback, remaining, patch, expected) in [
+        ("key", 0, json!({"bindings":7}), before.clone()),
+        (
+            "replacement",
+            0,
+            json!({"bindings":{"ws":{"headers":false}}}),
+            before.clone(),
+        ),
+        (
+            "key",
+            3,
+            json!({"bindings":{"ws":{"headers":false,"query":false}}}),
+            json!({"bindings":{"ws":{"headers":false,"query":true},"x-keep":[7,null]},"tags":[{"name":"keep"}]}),
+        ),
+        (
+            "replacement",
+            1,
+            json!({"bindings":{"ws":{"headers":false,"query":false}}}),
+            json!({"bindings":{"ws":{"headers":false,"query":true},"x-keep":[7,null]},"tags":[{"name":"keep"}]}),
+        ),
+        (
+            "raw",
+            0,
+            json!({"bindings":{"ws":{"headers":false,"query":7}}}),
+            json!({"bindings":{"ws":{"headers":false,"query":true},"x-keep":[7,null]},"tags":[{"name":"keep"}]}),
+        ),
+    ] {
+        let mut target = Metadata::decode(before.clone()).unwrap();
+        let patch = Metadata::decode(patch).unwrap();
+        assert_eq!(
+            target.patch_keyword_from(
+                "bindings",
+                &patch,
+                &mut RejectPatch {
+                    callback,
+                    remaining,
+                },
+            ),
+            Err(callback),
+        );
+        assert_eq!(serde_json::to_value(target).unwrap(), expected);
+    }
+}
+
+#[test]
+fn rejected_schema_metadata_patch_preserves_the_fallback_map() {
+    let before = json!({"dependentRequired":{"keep":[7],"other":["x"]}});
+    let patch = oas::SchemaValue::from_lossless_value(json!({
+        "dependentRequired":{"a":["first"],"b":["second"]}
+    }))
+    .unwrap();
+    for callback in ["key", "replacement"] {
+        for remaining in [0, 1] {
+            let mut target = oas::SchemaValue::from_lossless_value(before.clone()).unwrap();
+            let result = target.as_object_mut().unwrap().patch_metadata_keyword(
+                "dependentRequired",
+                patch.as_object().unwrap(),
+                &mut RejectPatch {
+                    callback,
+                    remaining,
+                },
+            );
+            let after = serde_json::to_value(&target).unwrap();
+            println!("schema metadata ({callback}, {remaining}): before={before} result={result:?} after={after}");
+            assert_eq!(result, Err(callback));
+            let mut expected = before.clone();
+            if remaining == 1 {
+                expected["dependentRequired"]["a"] = json!(["first"]);
+            }
+            assert_eq!(after, expected);
+            assert!(target.as_object().unwrap().dependent_required.is_none());
+        }
+    }
+}
+
+#[test]
+fn rejected_schema_metadata_patch_promotes_a_repaired_map() {
+    for callback in ["key", "replacement"] {
+        let mut target = oas::SchemaValue::from_lossless_value(json!({
+            "dependentRequired":{"a":[7],"other":["x"]}
+        }))
+        .unwrap();
+        let patch = oas::SchemaValue::from_lossless_value(json!({
+            "dependentRequired":{"a":["fixed"],"b":["rejected"]}
+        }))
+        .unwrap();
+        assert_eq!(
+            target.as_object_mut().unwrap().patch_metadata_keyword(
+                "dependentRequired",
+                patch.as_object().unwrap(),
+                &mut RejectPatch {
+                    callback,
+                    remaining: 1,
+                },
+            ),
+            Err(callback),
+        );
+        assert_eq!(
+            serde_json::to_value(&target).unwrap(),
+            json!({"dependentRequired":{"a":["fixed"],"other":["x"]}}),
+        );
+        let target = target.as_object().unwrap();
+        assert!(target.dependent_required.is_some());
+        assert!(!target.extras.contains_key("dependentRequired"));
+    }
+}
+
 #[test]
 fn component_metadata_patches_and_visitors_preserve_structural_ownership() {
     let mut target = Components::decode(json!({

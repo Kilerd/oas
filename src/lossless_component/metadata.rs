@@ -66,8 +66,9 @@ pub(crate) fn field<T: MetadataValue + Decode, P: MetadataPatch>(
                 Field::Invalid(value) => value,
                 Field::Missing => Value::Null,
             };
-            policy.raw(&mut value, patch)?;
+            let result = policy.raw(&mut value, patch);
             *target = Field::from_value(value);
+            result?;
         }
     }
     Ok(())
