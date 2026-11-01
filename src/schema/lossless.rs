@@ -254,16 +254,20 @@ macro_rules! patch_metadata_field {
         if $slot.is_none() && $extras.get($key).is_some_and(Value::is_object) {
             if let Some(patch) = &$patch {
                 let mut raw = $extras.remove($key).expect("raw object checked");
-                let fields = raw.as_object_mut().expect("raw object checked");
-                for (name, value) in patch {
-                    $policy.key(name)?;
-                    $policy.replacement(value)?;
-                    fields.insert(name.clone(), Value::Array(value.iter().cloned().map(Value::String).collect()));
-                }
+                let result = (|| {
+                    let fields = raw.as_object_mut().expect("raw object checked");
+                    for (name, value) in patch {
+                        $policy.key(name)?;
+                        $policy.replacement(value)?;
+                        fields.insert(name.clone(), Value::Array(value.iter().cloned().map(Value::String).collect()));
+                    }
+                    Ok(())
+                })();
                 match string_map(raw) {
                     Ok(value) => $slot = Some(value),
                     Err(value) => { $extras.insert($key.into(), value); }
                 }
+                result?;
                 return Ok(true);
             }
         }

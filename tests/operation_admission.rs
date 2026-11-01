@@ -39,7 +39,17 @@ fn existing_example_operations_match_strict_decoder() {
                 "get", "put", "post", "delete", "options", "head", "patch", "trace",
             ] {
                 if let Some(operation) = path.get(method) {
-                    equivalent(operation.clone());
+                    let strict = serde_json::from_value::<oas::Operation>(operation.clone())
+                        .expect("valid fixture operation must pass the strict decoder");
+                    let admitted = Operation::decode(operation.clone())
+                        .unwrap()
+                        .admit()
+                        .expect("valid fixture operation must be admitted");
+                    assert_eq!(
+                        serde_json::to_vec(&admitted).unwrap(),
+                        serde_json::to_vec(&strict).unwrap(),
+                        "output for {operation}"
+                    );
                     count += 1;
                 }
             }
