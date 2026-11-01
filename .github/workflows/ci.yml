@@ -10,13 +10,22 @@ permissions:
 
 jobs:
   test:
+    name: test (${{ matrix.name }})
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: default
+            features: ''
+          - name: lossless-schema-keywords
+            features: '--features lossless-schema-keywords'
     steps:
       - uses: actions/checkout@v4
         with:
           submodules: true
       - uses: dtolnay/rust-toolchain@stable
-      - run: cargo test --all-targets
-      - run: cargo test --doc
-      - run: cargo clippy --all-targets
-      - run: cargo run --example sse
+      - run: cargo test --all-targets ${{ matrix.features }}
+      - run: cargo test --doc ${{ matrix.features }}
+      - run: cargo clippy --all-targets ${{ matrix.features }}
+      - run: cargo run --example sse ${{ matrix.features }}
