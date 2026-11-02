@@ -11,10 +11,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Optional `lossless-schema-keywords` parsing retains formerly opaque values while exposing valid typed fields, including schemas embedded in operations. Default parsing remains strict.
 - `Schema::keyword_count()` counts present entries without serializing child payloads. With the optional feature, typed fields override colliding extras in serialization and counting.
 - Lossless AsyncAPI 3.0 structure owners (`Document`, `Server`, `ServerVariable`, `Channel`, `Operation`, `OperationTrait`, `OperationReply`, `OperationReplyAddress`, `Message`, `MessageTrait`, `SecurityScheme`, `OauthFlows`, `OauthFlow`, `Reference`) with node traversal, reference access and pointer lookup. `Channel.address` keeps an explicit `null` apart from a missing address.
+- Lossless OpenAPI `Document`, `Components` and `Paths` owners. They round-trip losslessly, let one visitor walk a document from its root, and support `SchemaLookup` from the root.
 
 ### Changed
 - AsyncAPI `Components` declares every 3.0 component group. `Components::take_from` moves the newly declared groups out of the source object, and `Node` / `NodeMut` gain variants for the new owners.
 - Lossless `Callback` decoding treats every key other than `x-*`, `$ref`, `summary` and `description` as a Path Item, so constant callback URLs without braces are traversed. Admission into the strict model is unchanged.
+- OpenAPI `Node` / `NodeMut` gain `Document`, `Components` and `Paths` variants; exhaustive matches must handle them.
 
 ## [0.4.1-dev] - 2026-10-30
 

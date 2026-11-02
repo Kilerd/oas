@@ -404,6 +404,20 @@ node!(SecurityScheme {
     name: String => "name", location: String => "in", scheme: String => "scheme", bearer_format: String => "bearerFormat",
     flows: OauthFlows => "flows", open_id_connect_url: String => "openIdConnectUrl"
 });
+node!(Components {
+    schemas: Fields<SchemaValue> => "schemas", responses: Fields<Response> => "responses",
+    parameters: Fields<Parameter> => "parameters", examples: Fields<Example> => "examples",
+    request_bodies: Fields<RequestBody> => "requestBodies", headers: Fields<Header> => "headers",
+    security_schemes: Fields<SecurityScheme> => "securitySchemes", links: Fields<Link> => "links",
+    callbacks: Fields<Callback> => "callbacks", path_items: Fields<PathItem> => "pathItems"
+});
+// The document root. `info`, `tags` and other undeclared vocabulary stay in extras.
+node!(Document {
+    openapi: String => "openapi", json_schema_dialect: String => "jsonSchemaDialect",
+    servers: List<Server> => "servers", paths: Paths => "paths", webhooks: Fields<PathItem> => "webhooks",
+    components: Components => "components", security: List<Fields<List<String>>> => "security",
+    external_docs: ExternalDocumentation => "externalDocs"
+});
 
 /// Callback expressions are structural, including constant URLs without braces.
 /// Extension values remain literal even if an extension name contains braces;
@@ -449,37 +463,52 @@ impl Decode for Callback {
     }
 }
 
-/// Response entries retain invalid siblings separately from valid responses.
-#[derive(Debug, Clone, Default, Serialize)]
-pub struct Responses {
-    #[serde(flatten)]
-    pub data: Fields<Response>,
-    #[serde(flatten)]
-    pub extras: BTreeMap<String, Value>,
-}
-impl crate::HeapSize for Responses {
-    fn heap_size(&self) -> usize {
-        crate::HeapSize::heap_size(&self.data)
-            .saturating_add(crate::HeapSize::heap_size(&self.extras))
-    }
-}
-
-impl Decode for Responses {
-    fn decode(value: Value) -> Result<Self, Value> {
-        let Value::Object(fields) = value else {
-            return Err(value);
-        };
-        let mut result = Self::default();
-        for (key, value) in fields {
-            if key.starts_with("x-") {
-                result.extras.insert(key, value);
-            } else {
-                result.data.insert(key, Field::from_value(value));
+// A map whose `x-*` keys stay literal in extras; every other key decodes as an
+// entry, and invalid entries stay separate from valid ones.
+macro_rules! extensible_map {
+    ($(#[$doc:meta])* $name:ident, $entry:ty) => {
+        $(#[$doc])*
+        #[derive(Debug, Clone, Default, Serialize)]
+        pub struct $name {
+            #[serde(flatten)]
+            pub data: Fields<$entry>,
+            #[serde(flatten)]
+            pub extras: BTreeMap<String, Value>,
+        }
+        impl crate::HeapSize for $name {
+            fn heap_size(&self) -> usize {
+                crate::HeapSize::heap_size(&self.data)
+                    .saturating_add(crate::HeapSize::heap_size(&self.extras))
             }
         }
-        Ok(result)
-    }
+        impl Decode for $name {
+            fn decode(value: Value) -> Result<Self, Value> {
+                let Value::Object(fields) = value else {
+                    return Err(value);
+                };
+                let mut result = Self::default();
+                for (key, value) in fields {
+                    if key.starts_with("x-") {
+                        result.extras.insert(key, value);
+                    } else {
+                        result.data.insert(key, Field::from_value(value));
+                    }
+                }
+                Ok(result)
+            }
+        }
+    };
 }
+extensible_map!(
+    /// Path entries; `x-*` extensions stay literal instead of decoding as Path Items.
+    Paths,
+    PathItem
+);
+extensible_map!(
+    /// Response entries retain invalid siblings separately from valid responses.
+    Responses,
+    Response
+);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ComponentKind {
@@ -603,6 +632,11 @@ schema_lookup!(Header { "schema" => schema, "itemSchema" => item_schema, "conten
 schema_lookup!(RequestBody { "content" => content });
 schema_lookup!(MediaType { "schema" => schema, "itemSchema" => item_schema, "encoding" => encoding });
 schema_lookup!(Encoding { "headers" => headers });
+schema_lookup!(Components {
+    "schemas" => schemas, "responses" => responses, "parameters" => parameters,
+    "requestBodies" => request_bodies, "headers" => headers
+});
+schema_lookup!(Document { "components" => components });
 impl SchemaLookup for Component {
     fn schema_at_tokens<T: AsRef<str>>(&self, tokens: &[T]) -> Option<&SchemaValue> {
         match self {
@@ -636,6 +670,9 @@ macro_rules! node_view {
                 Responses(&'a $($mutability)? Responses),
                 MediaType(&'a $($mutability)? MediaType),
                 Encoding(&'a $($mutability)? Encoding),
+                Document(&'a $($mutability)? Document),
+                Components(&'a $($mutability)? Components),
+                Paths(&'a $($mutability)? Paths),
                 Invalid(&'a $($mutability)? Value),
             }
             fn child<T: StructuralNode, E>(
@@ -757,6 +794,28 @@ macro_rules! node_view {
                                 child(value, key, &mut visit)?;
                             }
                         }
+                        Self::Document(v) => {
+                            child(& $($mutability)? v.components, "components", &mut visit)?;
+                            child(& $($mutability)? v.paths, "paths", &mut visit)?;
+                            children(& $($mutability)? v.webhooks, "webhooks", &mut visit)?;
+                        }
+                        Self::Components(v) => {
+                            children(& $($mutability)? v.callbacks, "callbacks", &mut visit)?;
+                            children(& $($mutability)? v.examples, "examples", &mut visit)?;
+                            children(& $($mutability)? v.headers, "headers", &mut visit)?;
+                            children(& $($mutability)? v.links, "links", &mut visit)?;
+                            children(& $($mutability)? v.parameters, "parameters", &mut visit)?;
+                            children(& $($mutability)? v.path_items, "pathItems", &mut visit)?;
+                            children(& $($mutability)? v.request_bodies, "requestBodies", &mut visit)?;
+                            children(& $($mutability)? v.responses, "responses", &mut visit)?;
+                            children(& $($mutability)? v.schemas, "schemas", &mut visit)?;
+                            children(& $($mutability)? v.security_schemes, "securitySchemes", &mut visit)?;
+                        }
+                        Self::Paths(v) => {
+                            for (key, value) in & $($mutability)? v.data {
+                                child(value, key, &mut visit)?;
+                            }
+                        }
                         _ => {}
                     }
                     Ok(())
@@ -804,7 +863,10 @@ structural_nodes!(
     Operation,
     Responses,
     MediaType,
-    Encoding
+    Encoding,
+    Document,
+    Components,
+    Paths
 );
 impl<T: StructuralNode> StructuralNode for Box<T> {
     fn node(&self) -> Node<'_> {

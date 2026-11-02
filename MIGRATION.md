@@ -221,6 +221,22 @@ Complete `Components` literals need the new fields or `..Default::default()`, an
 exhaustive matches on `Node` / `NodeMut` need the new variants.
 `Components::node_at_tokens(&[])` now returns `Node::Components` instead of `None`.
 
+OpenAPI documents have a lossless root as well. `lossless_component::Document`
+declares `openapi`, `jsonSchemaDialect`, `servers`, `paths`, `webhooks`,
+`components`, `security` and `externalDocs`; `info`, `tags` and unknown keys stay
+in `extras`. `Paths` keeps `x-*` keys literal in `extras` and decodes every other
+key as a Path Item, like `Responses`. `lossless_component::Components` declares
+the ten OpenAPI groups (`schemas`, `responses`, `parameters`, `examples`,
+`requestBodies`, `headers`, `securitySchemes`, `links`, `callbacks`,
+`pathItems`); unknown groups and `x-*` keys stay in `extras`. Both satisfy
+`to_value(decode(v)) == v`. The OpenAPI `Node` / `NodeMut` enums gain
+`Document`, `Components` and `Paths` variants, so a single visitor can walk a
+whole document from its root: `Document` visits `components`, `paths` and each
+`webhooks` entry, `Components` visits each entry under its group name, and
+`Paths` visits each Path Item under its path. Exhaustive matches on the OpenAPI
+`Node` / `NodeMut` must handle the new variants. `SchemaLookup` starts at the
+document root through `components`.
+
 `lossless_asyncapi::Metadata::owns_keyword` reports declared fields independently
 of presence. `Metadata::take_from` and `Components::take_from` move only declared
 fields accepted by the caller's predicate out of a JSON object. Rejected and
