@@ -100,11 +100,10 @@ fields while retaining values that cannot be represented without changing them:
 
 ```toml
 [dependencies]
-oas = { version = "=0.4.1-dev", features = ["lossless-schema-keywords"] }
+oas = { version = "=0.4.2-dev", features = ["lossless-schema-keywords"] }
 ```
 
-This feature is available from the source revision containing this section; use
-that revision until a package containing it is released. It is disabled by default.
+This feature is first packaged in `0.4.2-dev`. It is disabled by default.
 Cargo feature unification applies the parsing policy to all uses of this crate in
 the dependency graph, including schemas embedded in `Operation` and `MediaType`.
 

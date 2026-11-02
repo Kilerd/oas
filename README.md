@@ -5,7 +5,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 Rust OpenAPI models with Serde serialization and builders for constructing and
-editing API descriptions. The `0.4.1-dev` prerelease preserves retained-object
+editing API descriptions. The `0.4.2-dev` prerelease preserves retained-object
 metadata and reference annotations during typed edits. It includes schema type
 unions, boolean schemas, references with sibling keywords, and OpenAPI 3.2
 streaming media types, including Server-Sent Events (SSE).
@@ -20,7 +20,7 @@ changes and remaining model differences.
 
 ```toml
 [dependencies]
-oas = "=0.4.1-dev"
+oas = "=0.4.2-dev"
 serde_json = "1"
 ```
 
@@ -29,7 +29,7 @@ gain metadata fields, Link operation IDs and OAuth authorization URLs become
 optional, OAuth flow storage is boxed, and `Tag::with_description` edits an
 existing tag. Structural schema keywords now use typed fields and reject malformed
 values during parsing. Complete struct literals need adaptation. See the
-[0.4.1-dev changelog](CHANGELOG.md#041-dev---2026-10-30) and
+[0.4.2-dev changelog](CHANGELOG.md#042-dev---2026-11-02) and
 [Rust API migration](MIGRATION.md).
 
 ## Quick start
@@ -98,9 +98,9 @@ fields, and handle `SchemaValue::Boolean` separately. Structural keywords such a
 `properties`, `required`, `$defs`, and `anyOf` have typed fields. Unknown vocabulary
 and literal payloads remain in `Schema.extras`. Use `try_for_each_child_mut` to
 visit immediate schema children without traversing examples or defaults; callers
-control recursion and reference resolution. The unreleased optional
-`lossless-schema-keywords` feature retains formerly opaque values during typed
-edits; it is not included in the published `0.4.1-dev` package. See the [migration guide](MIGRATION.md)
+control recursion and reference resolution. The optional
+`lossless-schema-keywords` feature, first packaged in `0.4.2-dev`, retains
+formerly opaque values during typed edits. See the [migration guide](MIGRATION.md)
 for the field-access changes and stricter parsing of these keywords.
 
 Other reusable OpenAPI objects use `Referenceable<T>` for inline data or references:
@@ -214,7 +214,7 @@ round trip for unsupported fields.
 
 ## More examples and documentation
 
-- [API reference for 0.4.1-dev](https://docs.rs/oas/0.4.1-dev/oas/)
+- [API reference for 0.4.2-dev](https://docs.rs/oas/0.4.2-dev/oas/)
 - [Usage guide](https://github.com/Kilerd/oas/blob/main/USAGE_GUIDE.md) for builders, operations, parameters, and reusable components
 - [Basic builder example](https://github.com/Kilerd/oas/blob/main/examples/easy_usage.rs)
 - [Complete API example](https://github.com/Kilerd/oas/blob/main/examples/comprehensive_example.rs)

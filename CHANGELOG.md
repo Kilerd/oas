@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.2-dev] - 2026-11-02
+
 ### Added
 - Optional `lossless-schema-keywords` parsing retains formerly opaque values while exposing valid typed fields, including schemas embedded in operations. Default parsing remains strict.
 - `Schema::keyword_count()` counts present entries without serializing child payloads. With the optional feature, typed fields override colliding extras in serialization and counting.
@@ -17,6 +19,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - AsyncAPI `Components` declares every 3.0 component group. `Components::take_from` moves the newly declared groups out of the source object, and `Node` / `NodeMut` gain variants for the new owners.
 - Lossless `Callback` decoding treats every key other than `x-*`, `$ref`, `summary` and `description` as a Path Item, so constant callback URLs without braces are traversed. Admission into the strict model is unchanged.
 - OpenAPI `Node` / `NodeMut` gain `Document`, `Components` and `Paths` variants; exhaustive matches must handle them.
+
+### Fixed
+- Metadata patches keep the previous field value, and its untouched siblings, when a `MetadataPatch` policy rejects an update.
+
+This prerelease is the first package that contains the `lossless-schema-keywords` feature and the `lossless_component` / `lossless_asyncapi` modules.
 
 ## [0.4.1-dev] - 2026-10-30
 
