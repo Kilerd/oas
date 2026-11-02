@@ -188,6 +188,32 @@ consumers define work charges, literal-field handling, and schema merge policy;
 `patch_keyword_from` applies one present field when callers need to interleave
 metadata with other fields.
 
+AsyncAPI 3.0 structure has owners too: `Document`, `Server`, `ServerVariable`,
+`Channel`, `Operation`, `OperationTrait`, `OperationReply`,
+`OperationReplyAddress`, `Message`, `MessageTrait`, `SecurityScheme`,
+`OauthFlows`, `OauthFlow`, and `Reference` for positions that admit only a
+Reference Object (`channel`, `messages`, `Channel.servers`). Each one decodes,
+serializes and patches like the metadata owners, so `to_value(decode(v)) == v`.
+`Channel.address` is a `Field<String>`, which keeps an explicit `null` address
+(`Invalid(Null)`) apart from a missing one; explicit empty `messages` stay
+`Value` and absent ones stay `Missing`. Message `headers` and `payload` are
+`SchemaValue`, so a `schemaFormat` wrapper exposes its `schema` child only
+through the schema visitor. `Document.info` is not modeled and stays in `extras`.
+`Node`, `NodeMut`, `NodeLookup` and `reference()` cover the new owners; map
+entries and list elements are visited under their declaring field name, in
+lexical field order, and references are never followed.
+
+`Components` now declares every AsyncAPI 3.0 group: `schemas`, `servers`,
+`channels`, `operations`, `messages`, `securitySchemes`, `serverVariables`,
+`replies`, `replyAddresses`, `messageTraits`, `operationTraits` and
+`serverBindings` join the existing groups. `Components::take_from` therefore moves
+these keys out of the source object instead of leaving them in place, and
+`append_rekeyed` accepts sources that contain them. Consumers that read these
+groups from the source map, or from `Components.extras`, must use the new fields.
+Complete `Components` literals need the new fields or `..Default::default()`, and
+exhaustive matches on `Node` / `NodeMut` need the new variants.
+`Components::node_at_tokens(&[])` now returns `Node::Components` instead of `None`.
+
 `lossless_asyncapi::Metadata::owns_keyword` reports declared fields independently
 of presence. `Metadata::take_from` and `Components::take_from` move only declared
 fields accepted by the caller's predicate out of a JSON object. Rejected and
@@ -446,5 +472,6 @@ lossless round trip outside the supported subset.
 See the [3.2 specification](https://spec.openapis.org/oas/v3.2.0.html) and
 [3.1 to 3.2 guide](https://learn.openapis.org/upgrading/v3.1-to-v3.2.html) for the
 complete language changes. Gotcha's generator/dependency migration and SSE
-annotations are separate work; this crate describes neither WebSocket message
-contracts nor AsyncAPI documents.
+annotations are separate work. The optional `lossless_asyncapi` owners record
+AsyncAPI 3.0 document shape only; they do not validate documents or describe
+WebSocket message contracts.

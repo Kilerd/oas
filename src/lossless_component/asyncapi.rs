@@ -3,27 +3,18 @@
 use super::*;
 
 node!(metadata_collections Components {
+    schemas: Fields<SchemaValue> => "schemas", servers: Fields<Server> => "servers",
+    channels: Fields<Channel> => "channels", operations: Fields<Operation> => "operations",
+    messages: Fields<Message> => "messages", security_schemes: Fields<SecurityScheme> => "securitySchemes",
+    server_variables: Fields<ServerVariable> => "serverVariables",
     parameters: Fields<Parameter> => "parameters", correlation_ids: Fields<Correlation> => "correlationIds",
+    replies: Fields<OperationReply> => "replies", reply_addresses: Fields<OperationReplyAddress> => "replyAddresses",
+    message_traits: Fields<MessageTrait> => "messageTraits", operation_traits: Fields<OperationTrait> => "operationTraits",
+    server_bindings: Fields<Bindings> => "serverBindings",
     channel_bindings: Fields<Bindings> => "channelBindings", operation_bindings: Fields<Bindings> => "operationBindings",
     message_bindings: Fields<Bindings> => "messageBindings", tags: Fields<Tag> => "tags",
     external_docs: Fields<ExternalDocumentation> => "externalDocs"
 });
-
-impl NodeLookup for Components {
-    fn node_at_tokens<T: AsRef<str>>(&self, tokens: &[T]) -> Option<Node<'_>> {
-        let (key, tail) = tokens.split_first()?;
-        match key.as_ref() {
-            "parameters" => self.parameters.node_at_tokens(tail),
-            "correlationIds" => self.correlation_ids.node_at_tokens(tail),
-            "channelBindings" => self.channel_bindings.node_at_tokens(tail),
-            "operationBindings" => self.operation_bindings.node_at_tokens(tail),
-            "messageBindings" => self.message_bindings.node_at_tokens(tail),
-            "tags" => self.tags.node_at_tokens(tail),
-            "externalDocs" => self.external_docs.node_at_tokens(tail),
-            key => raw_at_tokens(self.extras.get(key)?, tail).map(Node::Raw),
-        }
-    }
-}
 
 node!(metadata_selected Metadata {
     tags: List<Tag> => "tags", external_docs: ExternalDocumentation => "externalDocs",
@@ -44,6 +35,80 @@ node!(metadata_access Bindings {
 });
 node!(metadata_access Ws {
     reference: String => "$ref", headers: SchemaValue => "headers", query: SchemaValue => "query"
+});
+
+// Root and structural objects. `info` and other undeclared vocabulary stay in extras.
+node!(metadata_access Document {
+    asyncapi: String => "asyncapi", id: String => "id", default_content_type: String => "defaultContentType",
+    servers: Fields<Server> => "servers", channels: Fields<Channel> => "channels",
+    operations: Fields<Operation> => "operations", components: Components => "components"
+});
+// A Reference Object where nothing else is admitted, such as `channel` and `messages`.
+node!(metadata_access Reference { reference: String => "$ref" });
+node!(metadata_access Server {
+    reference: String => "$ref", host: String => "host", protocol: String => "protocol",
+    protocol_version: String => "protocolVersion", pathname: String => "pathname",
+    description: String => "description", title: String => "title", summary: String => "summary",
+    variables: Fields<ServerVariable> => "variables", security: List<SecurityScheme> => "security",
+    tags: List<Tag> => "tags", external_docs: ExternalDocumentation => "externalDocs", bindings: Bindings => "bindings"
+});
+node!(metadata_access ServerVariable {
+    reference: String => "$ref", values: List<String> => "enum", default: String => "default",
+    description: String => "description", examples: List<String> => "examples"
+});
+// `address: null` (an unknown or dynamic address) stays distinct from a missing address.
+node!(metadata_access Channel {
+    reference: String => "$ref", address: String => "address", messages: Fields<Message> => "messages",
+    title: String => "title", summary: String => "summary", description: String => "description",
+    servers: List<Reference> => "servers", parameters: Fields<Parameter> => "parameters",
+    tags: List<Tag> => "tags", external_docs: ExternalDocumentation => "externalDocs", bindings: Bindings => "bindings"
+});
+node!(metadata_access Operation {
+    reference: String => "$ref", action: String => "action", channel: Reference => "channel",
+    title: String => "title", summary: String => "summary", description: String => "description",
+    security: List<SecurityScheme> => "security", tags: List<Tag> => "tags",
+    external_docs: ExternalDocumentation => "externalDocs", bindings: Bindings => "bindings",
+    traits: List<OperationTrait> => "traits", messages: List<Reference> => "messages", reply: OperationReply => "reply"
+});
+node!(metadata_access OperationTrait {
+    reference: String => "$ref", title: String => "title", summary: String => "summary",
+    description: String => "description", security: List<SecurityScheme> => "security", tags: List<Tag> => "tags",
+    external_docs: ExternalDocumentation => "externalDocs", bindings: Bindings => "bindings"
+});
+node!(metadata_access OperationReply {
+    reference: String => "$ref", address: OperationReplyAddress => "address", channel: Reference => "channel",
+    messages: List<Reference> => "messages"
+});
+node!(metadata_access OperationReplyAddress {
+    reference: String => "$ref", description: String => "description", location: String => "location"
+});
+// `headers` and `payload` are schemas, including `schemaFormat` wrappers. Examples are literal.
+node!(metadata_access Message {
+    reference: String => "$ref", headers: SchemaValue => "headers", payload: SchemaValue => "payload",
+    correlation_id: Correlation => "correlationId", content_type: String => "contentType", name: String => "name",
+    title: String => "title", summary: String => "summary", description: String => "description",
+    tags: List<Tag> => "tags", external_docs: ExternalDocumentation => "externalDocs", bindings: Bindings => "bindings",
+    examples: List<Value> => "examples", traits: List<MessageTrait> => "traits"
+});
+node!(metadata_access MessageTrait {
+    reference: String => "$ref", headers: SchemaValue => "headers", correlation_id: Correlation => "correlationId",
+    content_type: String => "contentType", name: String => "name", title: String => "title",
+    summary: String => "summary", description: String => "description", tags: List<Tag> => "tags",
+    external_docs: ExternalDocumentation => "externalDocs", bindings: Bindings => "bindings",
+    examples: List<Value> => "examples"
+});
+node!(metadata_access SecurityScheme {
+    reference: String => "$ref", kind: String => "type", description: String => "description",
+    name: String => "name", location: String => "in", scheme: String => "scheme", bearer_format: String => "bearerFormat",
+    flows: OauthFlows => "flows", open_id_connect_url: String => "openIdConnectUrl", scopes: List<String> => "scopes"
+});
+node!(metadata_access OauthFlows {
+    implicit: OauthFlow => "implicit", password: OauthFlow => "password",
+    client_credentials: OauthFlow => "clientCredentials", authorization_code: OauthFlow => "authorizationCode"
+});
+node!(metadata_access OauthFlow {
+    authorization_url: String => "authorizationUrl", token_url: String => "tokenUrl",
+    refresh_url: String => "refreshUrl", available_scopes: Fields<String> => "availableScopes"
 });
 
 macro_rules! node_views {
@@ -70,6 +135,11 @@ macro_rules! node_views {
 }
 node_views!(Metadata => Metadata, Tag => Tag, Parameter => Parameter,
     Correlation => Correlation, Bindings => Bindings, Ws => Ws,
+    Document => Document, Components => Components, Reference => Reference, Server => Server,
+    ServerVariable => ServerVariable, Channel => Channel, Operation => Operation,
+    OperationTrait => OperationTrait, OperationReply => OperationReply,
+    OperationReplyAddress => OperationReplyAddress, Message => Message, MessageTrait => MessageTrait,
+    SecurityScheme => SecurityScheme, OauthFlows => OauthFlows, OauthFlow => OauthFlow,
     Schema => SchemaValue, Documentation => ExternalDocumentation, Raw => Value);
 
 macro_rules! metadata_access {
@@ -101,11 +171,26 @@ metadata_access!(
     Correlation,
     Bindings,
     Ws,
+    Document,
+    Components,
+    Reference,
+    Server,
+    ServerVariable,
+    Channel,
+    Operation,
+    OperationTrait,
+    OperationReply,
+    OperationReplyAddress,
+    Message,
+    MessageTrait,
+    SecurityScheme,
+    OauthFlows,
+    OauthFlow,
     Documentation
 );
 
 macro_rules! node_children {
-    ($module:ident, $view:ident, [$($mutability:tt)?], $node:ident, $reference:ident) => {
+    ($module:ident, $view:ident, [$($mutability:tt)?], $node:ident, $reference:ident, $values:ident, $iter:ident) => {
         mod $module {
             use super::*;
             fn child<T: StructuralNode, E>(field: & $($mutability)? Field<T>, key: &str,
@@ -114,6 +199,23 @@ macro_rules! node_children {
                     Field::Missing => Ok(()),
                     Field::Invalid(value) => visit(key, $view::Raw(value)),
                     Field::Value(value) => visit(key, value.$node()),
+                }
+            }
+            // Map entries and list elements are visited under their declaring field name.
+            fn children<T: StructuralNode, E>(field: & $($mutability)? Field<Fields<T>>, key: &str,
+                visit: &mut impl FnMut(&str, $view<'_>) -> Result<(), E>) -> Result<(), E> {
+                match field {
+                    Field::Missing => Ok(()),
+                    Field::Invalid(value) => visit(key, $view::Raw(value)),
+                    Field::Value(values) => values.$values().try_for_each(|value| child(value, key, visit)),
+                }
+            }
+            fn elements<T: StructuralNode, E>(field: & $($mutability)? Field<List<T>>, key: &str,
+                visit: &mut impl FnMut(&str, $view<'_>) -> Result<(), E>) -> Result<(), E> {
+                match field {
+                    Field::Missing => Ok(()),
+                    Field::Invalid(value) => visit(key, $view::Raw(value)),
+                    Field::Value(values) => values.$iter().try_for_each(|value| child(value, key, visit)),
                 }
             }
             impl $view<'_> {
@@ -125,6 +227,17 @@ macro_rules! node_children {
                         Self::Bindings(value) => Some(& $($mutability)? value.reference),
                         Self::Ws(value) => Some(& $($mutability)? value.reference),
                         Self::Documentation(value) => Some(& $($mutability)? value.reference),
+                        Self::Reference(value) => Some(& $($mutability)? value.reference),
+                        Self::Server(value) => Some(& $($mutability)? value.reference),
+                        Self::ServerVariable(value) => Some(& $($mutability)? value.reference),
+                        Self::Channel(value) => Some(& $($mutability)? value.reference),
+                        Self::Operation(value) => Some(& $($mutability)? value.reference),
+                        Self::OperationTrait(value) => Some(& $($mutability)? value.reference),
+                        Self::OperationReply(value) => Some(& $($mutability)? value.reference),
+                        Self::OperationReplyAddress(value) => Some(& $($mutability)? value.reference),
+                        Self::Message(value) => Some(& $($mutability)? value.reference),
+                        Self::MessageTrait(value) => Some(& $($mutability)? value.reference),
+                        Self::SecurityScheme(value) => Some(& $($mutability)? value.reference),
                         _ => None,
                     }
                 }
@@ -150,6 +263,94 @@ macro_rules! node_children {
                             child(& $($mutability)? value.headers, "headers", &mut visit)?;
                             child(& $($mutability)? value.query, "query", &mut visit)?;
                         }
+                        Self::Document(value) => {
+                            children(& $($mutability)? value.channels, "channels", &mut visit)?;
+                            child(& $($mutability)? value.components, "components", &mut visit)?;
+                            children(& $($mutability)? value.operations, "operations", &mut visit)?;
+                            children(& $($mutability)? value.servers, "servers", &mut visit)?;
+                        }
+                        Self::Components(value) => {
+                            children(& $($mutability)? value.channel_bindings, "channelBindings", &mut visit)?;
+                            children(& $($mutability)? value.channels, "channels", &mut visit)?;
+                            children(& $($mutability)? value.correlation_ids, "correlationIds", &mut visit)?;
+                            children(& $($mutability)? value.external_docs, "externalDocs", &mut visit)?;
+                            children(& $($mutability)? value.message_bindings, "messageBindings", &mut visit)?;
+                            children(& $($mutability)? value.message_traits, "messageTraits", &mut visit)?;
+                            children(& $($mutability)? value.messages, "messages", &mut visit)?;
+                            children(& $($mutability)? value.operation_bindings, "operationBindings", &mut visit)?;
+                            children(& $($mutability)? value.operation_traits, "operationTraits", &mut visit)?;
+                            children(& $($mutability)? value.operations, "operations", &mut visit)?;
+                            children(& $($mutability)? value.parameters, "parameters", &mut visit)?;
+                            children(& $($mutability)? value.replies, "replies", &mut visit)?;
+                            children(& $($mutability)? value.reply_addresses, "replyAddresses", &mut visit)?;
+                            children(& $($mutability)? value.schemas, "schemas", &mut visit)?;
+                            children(& $($mutability)? value.security_schemes, "securitySchemes", &mut visit)?;
+                            children(& $($mutability)? value.server_bindings, "serverBindings", &mut visit)?;
+                            children(& $($mutability)? value.server_variables, "serverVariables", &mut visit)?;
+                            children(& $($mutability)? value.servers, "servers", &mut visit)?;
+                            children(& $($mutability)? value.tags, "tags", &mut visit)?;
+                        }
+                        Self::Server(value) => {
+                            child(& $($mutability)? value.bindings, "bindings", &mut visit)?;
+                            child(& $($mutability)? value.external_docs, "externalDocs", &mut visit)?;
+                            elements(& $($mutability)? value.security, "security", &mut visit)?;
+                            elements(& $($mutability)? value.tags, "tags", &mut visit)?;
+                            children(& $($mutability)? value.variables, "variables", &mut visit)?;
+                        }
+                        Self::Channel(value) => {
+                            child(& $($mutability)? value.bindings, "bindings", &mut visit)?;
+                            child(& $($mutability)? value.external_docs, "externalDocs", &mut visit)?;
+                            children(& $($mutability)? value.messages, "messages", &mut visit)?;
+                            children(& $($mutability)? value.parameters, "parameters", &mut visit)?;
+                            elements(& $($mutability)? value.servers, "servers", &mut visit)?;
+                            elements(& $($mutability)? value.tags, "tags", &mut visit)?;
+                        }
+                        Self::Operation(value) => {
+                            child(& $($mutability)? value.bindings, "bindings", &mut visit)?;
+                            child(& $($mutability)? value.channel, "channel", &mut visit)?;
+                            child(& $($mutability)? value.external_docs, "externalDocs", &mut visit)?;
+                            elements(& $($mutability)? value.messages, "messages", &mut visit)?;
+                            child(& $($mutability)? value.reply, "reply", &mut visit)?;
+                            elements(& $($mutability)? value.security, "security", &mut visit)?;
+                            elements(& $($mutability)? value.tags, "tags", &mut visit)?;
+                            elements(& $($mutability)? value.traits, "traits", &mut visit)?;
+                        }
+                        Self::OperationTrait(value) => {
+                            child(& $($mutability)? value.bindings, "bindings", &mut visit)?;
+                            child(& $($mutability)? value.external_docs, "externalDocs", &mut visit)?;
+                            elements(& $($mutability)? value.security, "security", &mut visit)?;
+                            elements(& $($mutability)? value.tags, "tags", &mut visit)?;
+                        }
+                        Self::OperationReply(value) => {
+                            child(& $($mutability)? value.address, "address", &mut visit)?;
+                            child(& $($mutability)? value.channel, "channel", &mut visit)?;
+                            elements(& $($mutability)? value.messages, "messages", &mut visit)?;
+                        }
+                        Self::Message(value) => {
+                            child(& $($mutability)? value.bindings, "bindings", &mut visit)?;
+                            child(& $($mutability)? value.correlation_id, "correlationId", &mut visit)?;
+                            child(& $($mutability)? value.external_docs, "externalDocs", &mut visit)?;
+                            child(& $($mutability)? value.headers, "headers", &mut visit)?;
+                            child(& $($mutability)? value.payload, "payload", &mut visit)?;
+                            elements(& $($mutability)? value.tags, "tags", &mut visit)?;
+                            elements(& $($mutability)? value.traits, "traits", &mut visit)?;
+                        }
+                        Self::MessageTrait(value) => {
+                            child(& $($mutability)? value.bindings, "bindings", &mut visit)?;
+                            child(& $($mutability)? value.correlation_id, "correlationId", &mut visit)?;
+                            child(& $($mutability)? value.external_docs, "externalDocs", &mut visit)?;
+                            child(& $($mutability)? value.headers, "headers", &mut visit)?;
+                            elements(& $($mutability)? value.tags, "tags", &mut visit)?;
+                        }
+                        Self::SecurityScheme(value) => {
+                            child(& $($mutability)? value.flows, "flows", &mut visit)?;
+                        }
+                        Self::OauthFlows(value) => {
+                            child(& $($mutability)? value.authorization_code, "authorizationCode", &mut visit)?;
+                            child(& $($mutability)? value.client_credentials, "clientCredentials", &mut visit)?;
+                            child(& $($mutability)? value.implicit, "implicit", &mut visit)?;
+                            child(& $($mutability)? value.password, "password", &mut visit)?;
+                        }
                         _ => {},
                     }
                     Ok(())
@@ -158,8 +359,8 @@ macro_rules! node_children {
         }
     };
 }
-node_children!(borrowed_children, Node, [], node, reference);
-node_children!(editable_children, NodeMut, [mut], node_mut, reference_mut);
+node_children!(borrowed_children, Node, [], node, reference, values, iter);
+node_children!(editable_children, NodeMut, [mut], node_mut, reference_mut, values_mut, iter_mut);
 
 /// Look up structure using already decoded tokens, without following references.
 pub trait NodeLookup {
@@ -232,6 +433,37 @@ lookup!(Correlation, Correlation {});
 lookup!(Bindings, Bindings { "ws" => ws });
 lookup!(Ws, Ws { "headers" => headers, "query" => query });
 lookup!(ExternalDocumentation, Documentation {});
+lookup!(Document, Document { "channels" => channels, "components" => components,
+    "operations" => operations, "servers" => servers });
+lookup!(Components, Components {
+    "schemas" => schemas, "servers" => servers, "channels" => channels, "operations" => operations,
+    "messages" => messages, "securitySchemes" => security_schemes, "serverVariables" => server_variables,
+    "parameters" => parameters, "correlationIds" => correlation_ids, "replies" => replies,
+    "replyAddresses" => reply_addresses, "messageTraits" => message_traits, "operationTraits" => operation_traits,
+    "serverBindings" => server_bindings, "channelBindings" => channel_bindings,
+    "operationBindings" => operation_bindings, "messageBindings" => message_bindings, "tags" => tags,
+    "externalDocs" => external_docs });
+lookup!(Reference, Reference {});
+lookup!(Server, Server { "variables" => variables, "security" => security, "tags" => tags,
+    "externalDocs" => external_docs, "bindings" => bindings });
+lookup!(ServerVariable, ServerVariable {});
+lookup!(Channel, Channel { "messages" => messages, "servers" => servers, "parameters" => parameters,
+    "tags" => tags, "externalDocs" => external_docs, "bindings" => bindings });
+lookup!(Operation, Operation { "channel" => channel, "security" => security, "tags" => tags,
+    "externalDocs" => external_docs, "bindings" => bindings, "traits" => traits, "messages" => messages,
+    "reply" => reply });
+lookup!(OperationTrait, OperationTrait { "security" => security, "tags" => tags,
+    "externalDocs" => external_docs, "bindings" => bindings });
+lookup!(OperationReply, OperationReply { "address" => address, "channel" => channel, "messages" => messages });
+lookup!(OperationReplyAddress, OperationReplyAddress {});
+lookup!(Message, Message { "headers" => headers, "payload" => payload, "correlationId" => correlation_id,
+    "tags" => tags, "externalDocs" => external_docs, "bindings" => bindings, "traits" => traits });
+lookup!(MessageTrait, MessageTrait { "headers" => headers, "correlationId" => correlation_id,
+    "tags" => tags, "externalDocs" => external_docs, "bindings" => bindings });
+lookup!(SecurityScheme, SecurityScheme { "flows" => flows });
+lookup!(OauthFlows, OauthFlows { "implicit" => implicit, "password" => password,
+    "clientCredentials" => client_credentials, "authorizationCode" => authorization_code });
+lookup!(OauthFlow, OauthFlow {});
 
 fn raw_at_tokens<'a, T: AsRef<str>>(value: &'a Value, tokens: &[T]) -> Option<&'a Value> {
     tokens.iter().try_fold(value, |value, token| match value {

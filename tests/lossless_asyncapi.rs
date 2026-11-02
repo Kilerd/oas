@@ -162,15 +162,9 @@ fn selected_metadata_preserves_partition_copy_and_first_value_patch_semantics() 
     let components = Components::take_from(&mut fields, |_| true);
     assert_eq!(
         serde_json::to_value(components).unwrap(),
-        json!({"parameters":{"Room":{"description":null}},"tags":{}})
+        json!({"parameters":{"Room":{"description":null}},"tags":{},"schemas":{"Text":true}})
     );
-    assert_eq!(
-        fields,
-        json!({"schemas":{"Text":true},"x-owner":true})
-            .as_object()
-            .unwrap()
-            .clone()
-    );
+    assert_eq!(fields, json!({"x-owner":true}).as_object().unwrap().clone());
 }
 
 #[test]
@@ -483,4 +477,506 @@ fn component_metadata_patches_and_visitors_preserve_structural_ownership() {
             "bindings":{"ws":{"query":true}},"tags":[{"name":"renamed"}],"x-literal":{"tags":[7]}
         })
     );
+}
+
+mod structure {
+    use oas::lossless_asyncapi::{
+        Channel, Components, Document, Message, MessageTrait, Node, NodeLookup, NodeMut, OauthFlow,
+        OauthFlows, Operation, OperationReply, OperationReplyAddress, OperationTrait, Reference,
+        SecurityScheme, Server, ServerVariable, StructuralNode,
+    };
+    use oas::lossless_component::{Decode, Field};
+    use serde::Serialize;
+    use serde_json::{json, Value};
+
+    fn fixtures() -> [Value; 2] {
+        [
+            serde_json::from_str(include_str!("fixtures/asyncapi/chat.json")).unwrap(),
+            serde_json::from_str(include_str!("fixtures/asyncapi/deferred-shapes.json")).unwrap(),
+        ]
+    }
+
+    /// Values at a JSON pointer; a trailing `/*` selects every map entry or list element.
+    fn select(document: &Value, pattern: &str) -> Vec<Value> {
+        let (pointer, all) = match pattern.strip_suffix("/*") {
+            Some(pointer) => (pointer, true),
+            None => (pattern, false),
+        };
+        match (document.pointer(pointer), all) {
+            (None, _) => Vec::new(),
+            (Some(value), false) => vec![value.clone()],
+            (Some(Value::Object(map)), true) => map.values().cloned().collect(),
+            (Some(Value::Array(values)), true) => values.clone(),
+            (Some(_), true) => Vec::new(),
+        }
+    }
+
+    fn assert_lossless<T: Decode + Serialize>(node: &str, patterns: &[&str]) {
+        let mut checked = 0;
+        for document in fixtures() {
+            for value in patterns
+                .iter()
+                .flat_map(|pattern| select(&document, pattern))
+            {
+                checked += 1;
+                match T::decode(value.clone()) {
+                    Ok(decoded) => assert_eq!(
+                        serde_json::to_value(&decoded).unwrap(),
+                        value,
+                        "{node} must round-trip"
+                    ),
+                    Err(rejected) => {
+                        assert!(!value.is_object(), "{node} must accept every object");
+                        assert_eq!(
+                            rejected, value,
+                            "{node} must return a rejected value unchanged"
+                        );
+                    }
+                }
+            }
+        }
+        assert!(
+            checked >= 2,
+            "{node} patterns must select fixtures, got {checked}"
+        );
+    }
+
+    #[test]
+    fn documents_round_trip_losslessly() {
+        for fixture in fixtures() {
+            let document = Document::decode(fixture.clone()).unwrap();
+            assert_eq!(serde_json::to_value(&document).unwrap(), fixture);
+            assert!(oas::HeapSize::heap_size(&document) > 0);
+            let deserialized: Document = serde_json::from_value(fixture.clone()).unwrap();
+            assert_eq!(serde_json::to_value(deserialized.node()).unwrap(), fixture);
+        }
+        assert_eq!(Document::decode(json!([])).unwrap_err(), json!([]));
+    }
+
+    #[test]
+    fn every_structural_node_round_trips_its_fixtures() {
+        assert_lossless::<Components>("Components", &["/components", "/x-root"]);
+        assert_lossless::<Server>("Server", &["/servers/*", "/components/servers/*"]);
+        assert_lossless::<ServerVariable>(
+            "ServerVariable",
+            &[
+                "/servers/production/variables/*",
+                "/servers/entries/variables/*",
+                "/components/serverVariables/*",
+            ],
+        );
+        assert_lossless::<Channel>("Channel", &["/channels/*", "/components/channels/*"]);
+        assert_lossless::<Operation>("Operation", &["/operations/*", "/components/operations/*"]);
+        assert_lossless::<OperationTrait>(
+            "OperationTrait",
+            &[
+                "/operations/sendChat/traits/*",
+                "/operations/badTrait/traits/*",
+                "/components/operationTraits/*",
+            ],
+        );
+        assert_lossless::<OperationReply>(
+            "OperationReply",
+            &[
+                "/operations/sendChat/reply",
+                "/operations/badReply/reply",
+                "/operations/badChannel/reply",
+                "/components/replies/*",
+            ],
+        );
+        assert_lossless::<OperationReplyAddress>(
+            "OperationReplyAddress",
+            &[
+                "/operations/sendChat/reply/address",
+                "/operations/badReply/reply/address",
+                "/components/replyAddresses/*",
+            ],
+        );
+        assert_lossless::<Message>(
+            "Message",
+            &[
+                "/channels/room/messages/*",
+                "/channels/badEntries/messages/*",
+                "/components/messages/*",
+            ],
+        );
+        assert_lossless::<MessageTrait>(
+            "MessageTrait",
+            &[
+                "/components/messages/Chat/traits/*",
+                "/components/messageTraits/*",
+            ],
+        );
+        assert_lossless::<SecurityScheme>(
+            "SecurityScheme",
+            &[
+                "/servers/production/security/*",
+                "/servers/entries/security/*",
+                "/components/securitySchemes/*",
+            ],
+        );
+        assert_lossless::<OauthFlows>(
+            "OauthFlows",
+            &[
+                "/components/securitySchemes/OAuth/flows",
+                "/components/securitySchemes/s/flows",
+                "/components/securitySchemes/t/flows",
+            ],
+        );
+        assert_lossless::<OauthFlow>(
+            "OauthFlow",
+            &[
+                "/components/securitySchemes/OAuth/flows/*",
+                "/components/securitySchemes/t/flows/*",
+            ],
+        );
+        assert_lossless::<Reference>(
+            "Reference",
+            &[
+                "/operations/sendChat/channel",
+                "/operations/sendChat/messages/*",
+                "/channels/room/servers/*",
+                "/channels/badEntries/servers/*",
+                "/operations/badReply/reply/messages/*",
+            ],
+        );
+    }
+
+    #[test]
+    fn presence_null_and_invalid_shapes_remain_distinct() {
+        let address = |value: Value| Channel::decode(value).unwrap().address;
+        assert!(
+            matches!(address(json!({"address":"/rooms"})), Field::Value(value) if value == "/rooms")
+        );
+        assert!(matches!(
+            address(json!({"address":null})),
+            Field::Invalid(Value::Null)
+        ));
+        assert!(
+            matches!(address(json!({"address":7})), Field::Invalid(value) if value == json!(7))
+        );
+        assert!(address(json!({})).is_missing());
+
+        let channel = Channel::decode(json!({"messages":{}})).unwrap();
+        assert!(matches!(&channel.messages, Field::Value(messages) if messages.is_empty()));
+        assert!(Channel::decode(json!({})).unwrap().messages.is_missing());
+        let operation = Operation::decode(json!({"messages":[]})).unwrap();
+        assert!(matches!(&operation.messages, Field::Value(messages) if messages.is_empty()));
+        assert!(Operation::decode(json!({})).unwrap().messages.is_missing());
+
+        let [chat, deferred] = fixtures();
+        let chat = Document::decode(chat).unwrap();
+        assert!(
+            chat.extras.contains_key("info"),
+            "undeclared vocabulary stays in extras"
+        );
+        let room = chat.channels.as_value().unwrap()["room"]
+            .as_value()
+            .unwrap();
+        assert!(
+            !room.extras.contains_key("address"),
+            "declared fields never live in extras"
+        );
+        assert!(room.extras.contains_key("x-channel-note"));
+        let deferred = Document::decode(deferred).unwrap();
+        assert!(matches!(deferred.asyncapi, Field::Invalid(_)));
+        let channels = deferred.channels.as_value().unwrap();
+        assert!(matches!(channels["notObject"], Field::Invalid(_)));
+        let bad = channels["badAddress"].as_value().unwrap();
+        assert!(matches!(bad.messages, Field::Invalid(_)));
+        assert!(matches!(bad.parameters, Field::Invalid(Value::Null)));
+    }
+
+    fn collect_references(node: Node<'_>, references: &mut Vec<String>) {
+        if let Some(Field::Value(reference)) = node.reference() {
+            references.push(reference.clone());
+        }
+        node.try_for_each_child(|_, child| {
+            collect_references(child, references);
+            Ok::<_, ()>(())
+        })
+        .unwrap();
+    }
+
+    const STRUCTURAL_REFERENCES: [&str; 27] = [
+        "#/channels/dynamic",
+        "#/channels/room",
+        "#/channels/room",
+        "#/channels/room",
+        "#/channels/room",
+        "#/channels/room/messages/chat",
+        "#/channels/room/messages/typing",
+        "#/components/channels/Shared",
+        "#/components/channels/Shared",
+        "#/components/correlationIds/Request",
+        "#/components/externalDocs/Guide",
+        "#/components/messageTraits/Envelope",
+        "#/components/messages/Chat",
+        "#/components/messages/Chat",
+        "#/components/operationBindings/Ws",
+        "#/components/operationTraits/Audited",
+        "#/components/operations/Shared",
+        "#/components/parameters/RoomId",
+        "#/components/replies/Ack",
+        "#/components/replyAddresses/Inbox",
+        "#/components/securitySchemes/OAuth",
+        "#/components/securitySchemes/Token",
+        "#/components/securitySchemes/Token",
+        "#/components/serverVariables/Shared",
+        "#/components/servers/Staging",
+        "#/components/tags/Public",
+        "#/servers/production",
+    ];
+
+    #[test]
+    fn traversal_exposes_structural_references_but_not_literals() {
+        let [chat, _] = fixtures();
+        let document = Document::decode(chat).unwrap();
+        let mut references = Vec::new();
+        collect_references(document.node(), &mut references);
+        references.sort();
+        assert_eq!(references, STRUCTURAL_REFERENCES);
+
+        let mut visited = Vec::new();
+        document
+            .node()
+            .try_for_each_child(|key, _| {
+                visited.push(key.to_owned());
+                Ok::<_, ()>(())
+            })
+            .unwrap();
+        assert_eq!(
+            visited,
+            [
+                "channels",
+                "channels",
+                "channels",
+                "channels",
+                "components",
+                "operations",
+                "operations",
+                "operations",
+                "operations",
+                "servers",
+                "servers"
+            ]
+        );
+    }
+
+    fn rename_references(node: NodeMut<'_>) {
+        let mut node = node;
+        if let Some(Field::Value(reference)) = node.reference_mut() {
+            if let Some(rest) = reference.strip_prefix("#/channels/room") {
+                *reference = format!("#/channels/lobby{rest}");
+            }
+        }
+        node.try_for_each_child(|_, child| {
+            rename_references(child);
+            Ok::<_, ()>(())
+        })
+        .unwrap();
+    }
+
+    #[test]
+    fn editable_traversal_rewrites_references_in_place() {
+        let [chat, deferred] = fixtures();
+        let mut document = Document::decode(chat.clone()).unwrap();
+        rename_references(document.node_mut());
+        let expected: Value = serde_json::from_str(
+            &chat
+                .to_string()
+                .replace("\"#/channels/room", "\"#/channels/lobby"),
+        )
+        .unwrap();
+        assert_ne!(expected, chat);
+        assert_eq!(serde_json::to_value(&document).unwrap(), expected);
+
+        let mut document = Document::decode(deferred.clone()).unwrap();
+        rename_references(document.node_mut());
+        assert_eq!(serde_json::to_value(&document).unwrap(), deferred);
+    }
+
+    #[test]
+    fn lookup_borrows_nested_structure_without_following_references() {
+        let [chat, deferred] = fixtures();
+        let chat = Document::decode(chat).unwrap();
+        let schema = |tokens: &[&str]| match chat.node_at_tokens(tokens) {
+            Some(Node::Schema(schema)) => serde_json::to_value(schema).unwrap(),
+            _ => panic!("schema at {tokens:?}"),
+        };
+        assert_eq!(
+            schema(&[
+                "channels",
+                "room",
+                "messages",
+                "typing",
+                "payload",
+                "properties",
+                "user"
+            ]),
+            json!({"$ref":"#/components/schemas/User"})
+        );
+        assert_eq!(
+            schema(&[
+                "components",
+                "messages",
+                "Chat",
+                "payload",
+                "properties",
+                "text"
+            ]),
+            json!({"type":"string"})
+        );
+        assert_eq!(
+            schema(&[
+                "channels",
+                "room",
+                "bindings",
+                "ws",
+                "headers",
+                "properties",
+                "x-model"
+            ]),
+            json!({"type":"string","enum":["a","b"]})
+        );
+        assert_eq!(
+            schema(&["components", "messages", "Avro", "payload", "schema"]),
+            json!({"type":"string"})
+        );
+        assert_eq!(
+            schema(&["components", "messageTraits", "Envelope", "headers"])["properties"]
+                ["x-trace"],
+            json!({"type":"string"})
+        );
+        let Some(Node::OperationReplyAddress(address)) =
+            chat.node_at_tokens(&["operations", "sendChat", "reply", "address"])
+        else {
+            panic!("reply address");
+        };
+        assert_eq!(
+            address.reference.as_value().unwrap(),
+            "#/components/replyAddresses/Inbox"
+        );
+        let Some(Node::OauthFlow(flow)) = chat.node_at_tokens(&[
+            "components",
+            "securitySchemes",
+            "OAuth",
+            "flows",
+            "clientCredentials",
+        ]) else {
+            panic!("oauth flow");
+        };
+        assert_eq!(
+            flow.token_url.as_value().unwrap(),
+            "https://example.com/token"
+        );
+        assert!(matches!(
+            chat.node_at_tokens(&["operations", "sendChat", "messages", "0"]),
+            Some(Node::Reference(_))
+        ));
+        assert!(matches!(
+            chat.node_at_tokens(&["components", "operationTraits", "Audited", "security", "0"]),
+            Some(Node::SecurityScheme(_))
+        ));
+        assert!(matches!(
+            chat.node_at_tokens::<&str>(&[]),
+            Some(Node::Document(_))
+        ));
+        assert!(matches!(
+            chat.node_at_tokens(&["components"]),
+            Some(Node::Components(_))
+        ));
+        assert!(chat
+            .node_at_tokens(&["channels", "shared", "address"])
+            .is_none());
+        assert!(matches!(
+            chat.node_at_tokens(&["info", "title"]),
+            Some(Node::Raw(Value::String(title))) if title == "Chat"
+        ));
+
+        let deferred = Document::decode(deferred).unwrap();
+        assert!(matches!(
+            deferred.node_at_tokens(&["channels", "badAddress", "messages"]),
+            Some(Node::Raw(Value::Array(_)))
+        ));
+        assert!(matches!(
+            deferred.node_at_tokens(&["servers", "partial", "security", "Token"]),
+            Some(Node::Raw(Value::Array(_)))
+        ));
+        assert!(matches!(
+            deferred.node_at_tokens(&["components", "schemas", "Null"]),
+            Some(Node::Raw(Value::Null))
+        ));
+    }
+
+    #[test]
+    fn structural_owners_patch_nested_entries_through_the_policy() {
+        let mut channel = Channel::decode(json!({
+            "address":"/rooms", "messages":{"chat":{"name":"chat","payload":{"type":"string"}},"old":{}},
+            "x-keep":true
+        }))
+        .unwrap();
+        let patch = Channel::decode(json!({
+            "address":null, "messages":{"chat":{"name":"renamed","payload":{"const":"x"}},"old":null}
+        }))
+        .unwrap();
+        let mut policy = super::Patch::default();
+        channel.patch_metadata(&patch, &mut policy).unwrap();
+        assert_eq!(
+            policy.keys,
+            ["address", "messages", "chat", "name", "payload", "old"]
+        );
+        assert!(channel.address.is_missing());
+        assert_eq!(
+            serde_json::to_value(&channel).unwrap(),
+            json!({"messages":{"chat":{"name":"renamed","payload":{"const":"x"}}},"x-keep":true})
+        );
+    }
+
+    #[test]
+    fn components_own_and_rekey_every_declared_group() {
+        let [chat, _] = fixtures();
+        let mut fields = chat["components"].as_object().unwrap().clone();
+        let mut components = Components::take_from(&mut fields, |key| key != "messages");
+        assert_eq!(
+            fields.keys().collect::<Vec<_>>(),
+            ["messages", "x-components-owner"]
+        );
+        assert!(components.extras.is_empty());
+
+        let source = Components::decode(json!({
+            "messages":{"Chat":{"payload":{"type":"string"}}},
+            "schemas":{"User":true}, "messageTraits":{"Envelope":{}},
+            "replies":{"Ack":{}}, "serverBindings":{"Ws":{"ws":{}}}
+        }))
+        .unwrap();
+        let mut renamed = Vec::new();
+        components
+            .append_rekeyed(source, |group, name| {
+                renamed.push(format!("{group}/{name}"));
+                format!("Other{name}")
+            })
+            .unwrap();
+        assert_eq!(
+            renamed,
+            [
+                "schemas/User",
+                "messages/Chat",
+                "replies/Ack",
+                "messageTraits/Envelope",
+                "serverBindings/Ws"
+            ]
+        );
+        let value = serde_json::to_value(&components).unwrap();
+        assert_eq!(
+            value["messages"],
+            json!({"OtherChat":{"payload":{"type":"string"}}})
+        );
+        assert_eq!(value["schemas"]["OtherUser"], json!(true));
+        assert_eq!(
+            value["schemas"]["User"],
+            chat["components"]["schemas"]["User"]
+        );
+        assert_eq!(value["messageTraits"]["OtherEnvelope"], json!({}));
+    }
 }
