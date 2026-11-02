@@ -171,6 +171,13 @@ would discard their inline editing surface. Avoid a duplicate `$ref` in admitted
 `Callback.extras`: unlike Schema's effective-key methods, Callback serialization
 does not suppress manually inserted duplicate keys.
 
+The lossless `lossless_component::Callback` decodes every key that is not `x-*`,
+`$ref`, `summary` or `description` as a Path Item, including constant URLs and
+runtime expressions without braces. Node traversal therefore visits references
+inside those Path Items. Admission keeps the strict model's split: keys without
+`{` still go to `oas::Callback.extras`, so admitting a decoded callback does not
+reject a constant-URL entry whose value is not a valid Path Item.
+
 `SchemaValue::from_lossless_value` retains malformed structural children as
 `SchemaValue::Invalid`; exhaustive matches must handle this feature-gated variant.
 The method still rejects a non-object, non-boolean root. Use `admit_legacy_root`

@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 - AsyncAPI `Components` declares every 3.0 component group. `Components::take_from` moves the newly declared groups out of the source object, and `Node` / `NodeMut` gain variants for the new owners.
+- Lossless `Callback` decoding treats every key other than `x-*`, `$ref`, `summary` and `description` as a Path Item, so constant callback URLs without braces are traversed. Admission into the strict model is unchanged.
 
 ## [0.4.1-dev] - 2026-10-30
 

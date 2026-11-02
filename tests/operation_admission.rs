@@ -294,3 +294,16 @@ fn ordinary_nested_field_acceptance_matches_strict_decoder() {
         }
     }
 }
+
+#[test]
+fn callback_expressions_without_braces_admit_like_the_strict_decoder() {
+    for child in [
+        json!({"https://example.test/hook":{"post":{"responses":{"204":{"description":"done"}}}}}),
+        json!({"https://example.test/hook":7, "{$request.body#/url}":{}}),
+        json!({"$request.header#/X-Callback":{"get":7}}),
+        json!({"$ref":"#/components/callbacks/Event", "https://example.test/hook":{"get":7}}),
+        json!({"$ref":"#/components/callbacks/Event", "summary":"s", "https://example.test/hook":{}}),
+    ] {
+        equivalent(with_child("callback", child));
+    }
+}

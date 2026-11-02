@@ -117,3 +117,52 @@ fn shallow_overlay_preserves_null_and_replaces_entire_present_field() {
         })
     );
 }
+
+#[test]
+fn callback_expressions_without_braces_are_path_items() {
+    use oas::lossless_component::{Callback, Node, StructuralNode};
+    fn collect(node: Node<'_>, references: &mut Vec<String>) {
+        if let Some(Field::Value(reference)) = node.reference() {
+            references.push(reference.clone());
+        }
+        node.try_for_each_child(|_, child| {
+            collect(child, references);
+            Ok::<_, ()>(())
+        })
+        .unwrap();
+    }
+    let input = json!({
+        "https://example.test/hook": {"post": {"requestBody": {"$ref": "#/components/requestBodies/Event"}}},
+        "{$request.body#/url}": {"$ref": "#/components/pathItems/Event"},
+        "$request.header#/X-Callback": 7,
+        "summary": "kept", "description": null,
+        "x-{literal}": {"post": {"$ref": "literal"}}
+    });
+    let callback = Callback::decode(input.clone()).unwrap();
+    assert_eq!(serde_json::to_value(&callback).unwrap(), input);
+    assert_eq!(
+        callback.paths.keys().collect::<Vec<_>>(),
+        [
+            "$request.header#/X-Callback",
+            "https://example.test/hook",
+            "{$request.body#/url}"
+        ]
+    );
+    assert!(matches!(
+        callback.paths["$request.header#/X-Callback"],
+        Field::Invalid(_)
+    ));
+    assert_eq!(
+        callback.extras.keys().collect::<Vec<_>>(),
+        ["description", "summary", "x-{literal}"]
+    );
+    let mut references = Vec::new();
+    collect(callback.node(), &mut references);
+    assert_eq!(
+        references,
+        [
+            "#/components/requestBodies/Event",
+            "#/components/pathItems/Event"
+        ]
+    );
+}

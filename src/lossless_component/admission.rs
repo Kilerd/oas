@@ -410,6 +410,13 @@ impl Callback {
                 )
             })
     }
+    // The strict model keeps expressions without braces as opaque extras.
+    fn check_strict_paths(&self) -> Result<()> {
+        self.paths
+            .iter()
+            .filter(|(key, _)| key.contains('{'))
+            .try_for_each(|(_, value)| required_check(value))
+    }
 }
 impl Admit for Callback {
     type Output = crate::Referenceable<crate::Callback>;
@@ -417,12 +424,12 @@ impl Admit for Callback {
         if self.valid_reference() {
             Ok(())
         } else {
-            self.paths.check()
+            self.check_strict_paths()
         }
     }
     fn admit(self) -> Result<Self::Output> {
         let pure = self.paths.is_empty() && self.extras.keys().all(|key| is_reference_key(key));
-        if self.valid_reference() && (pure || self.paths.check().is_err()) {
+        if self.valid_reference() && (pure || self.check_strict_paths().is_err()) {
             let mut extras = self.extras;
             let summary = optional(Field::<String>::from_value(
                 extras.remove("summary").unwrap_or(Value::Null),
@@ -440,10 +447,19 @@ impl Admit for Callback {
                 extras,
             }))
         } else {
+            let mut data = BTreeMap::new();
+            let mut extras = self.extras;
+            for (key, value) in self.paths {
+                if key.contains('{') {
+                    data.insert(key, required(value)?);
+                } else {
+                    retain(&mut extras, &key, value)?;
+                }
+            }
             Ok(crate::Referenceable::Data(crate::Callback {
                 reference: self.reference,
-                data: self.paths.admit()?,
-                extras: self.extras,
+                data,
+                extras,
             }))
         }
     }

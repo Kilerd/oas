@@ -405,8 +405,9 @@ node!(SecurityScheme {
     flows: OauthFlows => "flows", open_id_connect_url: String => "openIdConnectUrl"
 });
 
-/// Callback expressions are structural; extension values remain literal even if
-/// an extension name contains braces.
+/// Callback expressions are structural, including constant URLs without braces.
+/// Extension values remain literal even if an extension name contains braces;
+/// Reference Object `summary` and `description` stay in extras.
 #[derive(Debug, Clone, Default, Serialize)]
 pub struct Callback {
     #[serde(rename = "$ref", skip_serializing_if = "Field::is_missing")]
@@ -438,7 +439,7 @@ impl Decode for Callback {
             ..Self::default()
         };
         for (key, value) in fields {
-            if !key.starts_with("x-") && key.contains('{') {
+            if !key.starts_with("x-") && !admission::is_reference_key(&key) {
                 result.paths.insert(key, Field::from_value(value));
             } else {
                 result.extras.insert(key, value);
