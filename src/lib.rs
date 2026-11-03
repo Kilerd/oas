@@ -69,6 +69,7 @@ pub mod lossless_component;
 #[cfg(feature = "lossless-schema-keywords")]
 pub use lossless_component::asyncapi as lossless_asyncapi;
 pub mod json_pointer;
+pub mod merge_patch;
 mod parameter_location;
 
 mod schema;

@@ -10,6 +10,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - `json_pointer::Step` locates a child under its parent: a field, a map entry with its key, or an array element with its index. It writes an escaped pointer suffix and pushes unescaped tokens.
 - Keyed child visitors: `try_for_each_child_at` on the lossless OpenAPI and AsyncAPI `Node` / `NodeMut`, and `Schema::try_for_each_child_at` / `try_for_each_child_mut_at`. They visit the same children in the same order as the unkeyed visitors, whose behavior is unchanged.
+- `merge_patch::merge` and `merge_with` apply an RFC 7386 JSON Merge Patch to a `serde_json::Value`; `merge_with` charges each patched value to a caller callback.
+- With `lossless-schema-keywords`: `merge_patch::MergePatch`, an RFC 7386 `MetadataPatch` policy for `patch_metadata`, and `SchemaValue::merge_patch` / `merge_patch_with`, a typed schema merge whose result serializes as the JSON merge and keeps the typed placement of a fresh lossless decode.
 
 ## [0.4.2-dev] - 2026-11-02
 

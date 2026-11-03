@@ -296,6 +296,97 @@ macro_rules! patch_metadata_field {
     ($other:ident, $($args:tt)*) => { Ok(false) };
 }
 
+// RFC 7386 for one present typed patch keyword. Raw fallbacks of structural
+// object keywords are never objects, so a typed object patch replaces them.
+macro_rules! merge_field {
+    (scalar, $this:ident, $field:ident, $key:expr, $patch:expr, $charge:expr) => {{
+        $charge()?;
+        $this.$field = Some($patch.clone());
+        $this.extras.remove($key);
+    }};
+    (strings, $($args:tt)*) => { merge_field!(scalar, $($args)*) };
+    (schema_array, $($args:tt)*) => { merge_field!(scalar, $($args)*) };
+    (legacy_child, $($args:tt)*) => { merge_field!(child, $($args)*) };
+    (child, $this:ident, $field:ident, $key:expr, $patch:expr, $charge:expr) => {{
+        $this.extras.remove($key);
+        let target = $this.$field.get_or_insert_with(|| Box::new(SchemaValue::Invalid(Value::Null)));
+        merge_schema(target, $patch, $charge)?;
+    }};
+    (schema_map, $this:ident, $field:ident, $key:expr, $patch:expr, $charge:expr) => {{
+        $this.extras.remove($key);
+        let target = $this.$field.get_or_insert_with(BTreeMap::new);
+        for (name, patch) in $patch {
+            if matches!(patch, SchemaValue::Invalid(Value::Null)) {
+                target.remove(name);
+            } else {
+                let entry = target.entry(name.clone()).or_insert(SchemaValue::Invalid(Value::Null));
+                merge_schema(entry, patch, $charge)?;
+            }
+        }
+    }};
+    (items, $this:ident, $field:ident, $key:expr, $patch:expr, $charge:expr) => {{
+        $this.extras.remove($key);
+        match $patch {
+            SchemaItems::Schema(patch) => {
+                if !matches!($this.$field, Some(SchemaItems::Schema(_))) {
+                    $this.$field = Some(SchemaItems::Schema(Box::new(SchemaValue::Invalid(Value::Null))));
+                }
+                if let Some(SchemaItems::Schema(target)) = &mut $this.$field {
+                    merge_schema(target, patch, $charge)?;
+                }
+            }
+            SchemaItems::Tuple(_) => {
+                $charge()?;
+                $this.$field = Some($patch.clone());
+            }
+        }
+    }};
+    (dependencies, $this:ident, $field:ident, $key:expr, $patch:expr, $charge:expr) => {{
+        $this.extras.remove($key);
+        let target = $this.$field.get_or_insert_with(BTreeMap::new);
+        for (name, patch) in $patch {
+            match patch {
+                SchemaDependency::Schema(patch) if matches!(**patch, SchemaValue::Invalid(Value::Null)) => {
+                    target.remove(name);
+                }
+                SchemaDependency::Schema(patch) => {
+                    let entry = target.entry(name.clone()).or_insert(SchemaDependency::Required(Vec::new()));
+                    if !matches!(entry, SchemaDependency::Schema(_)) {
+                        *entry = SchemaDependency::Schema(Box::new(SchemaValue::Invalid(Value::Null)));
+                    }
+                    if let SchemaDependency::Schema(target) = entry {
+                        merge_schema(target, patch, $charge)?;
+                    }
+                }
+                SchemaDependency::Required(_) => {
+                    $charge()?;
+                    target.insert(name.clone(), patch.clone());
+                }
+            }
+        }
+    }};
+    (string_map, $this:ident, $field:ident, $key:expr, $patch:expr, $charge:expr) => {{
+        if $this.$field.is_none() && $this.extras.get($key).is_some_and(Value::is_object) {
+            // A malformed object target merges as JSON and is promoted if repaired.
+            let patch = serde_json::to_value($patch).expect("names serialize");
+            $this.merge_raw_keyword($key, &patch, $charge)?;
+        } else {
+            $this.extras.remove($key);
+            let target = $this.$field.get_or_insert_with(BTreeMap::new);
+            for (name, names) in $patch {
+                $charge()?;
+                target.insert(name.clone(), names.clone());
+            }
+        }
+    }};
+    (external_docs, $($args:tt)*) => { merge_field!(component, $($args)*) };
+    (component, $this:ident, $field:ident, $key:expr, $patch:expr, $charge:expr) => {{
+        $this.extras.remove($key);
+        let target = $this.$field.get_or_insert_with(Default::default);
+        target.patch_metadata($patch, &mut crate::merge_patch::MergePatch::charging(&mut *$charge))?;
+    }};
+}
+
 #[derive(Clone, Copy)]
 enum Origin {
     LegacyTyped,
@@ -605,6 +696,34 @@ macro_rules! implement_fields {
                 }
             }
 
+            // RFC 7386 for one effective keyword of `patch`.
+            fn merge_patch_keyword<E>(
+                &mut self,
+                key: &str,
+                patch: &Self,
+                charge: &mut dyn FnMut() -> Result<(), E>,
+            ) -> Result<(), E> {
+                if patch.keyword_is_null(key) {
+                    self.remove_keyword(key);
+                    return Ok(());
+                }
+                match key {
+                    $($old_key => if let Some(value) = &patch.$old {
+                        merge_field!($old_decode, self, $old, $old_key, value, charge);
+                        return Ok(());
+                    },)*
+                    $($key => if let Some(value) = &patch.$field {
+                        merge_field!($decode, self, $field, $key, value, charge);
+                        return Ok(());
+                    },)*
+                    _ => {}
+                }
+                match patch.extras.get(key) {
+                    Some(value) => self.merge_raw_keyword(key, value, charge),
+                    None => Ok(()),
+                }
+            }
+
             fn owns_keyword(&self, key: &str) -> bool {
                 [$(($old_key, self.$old.is_some()),)* $(($key, self.$field.is_some()),)*]
                     .into_iter().any(|(keyword, present)| keyword == key && present)
@@ -791,6 +910,132 @@ impl SchemaValue {
             _ => Err(<serde_json::Error as serde::de::Error>::custom(
                 "expected an object or boolean schema",
             )),
+        }
+    }
+}
+
+impl SchemaValue {
+    /// Apply an RFC 7386 merge patch to a typed schema. The result serializes
+    /// as the JSON merge of the two serialized schemas would, and keeps the
+    /// typed fields and fallbacks a fresh lossless decode of that JSON would.
+    ///
+    /// A patch keyword whose value is `null` removes the keyword; a patch must
+    /// therefore be decoded losslessly ([`SchemaValue::from_lossless_value`]),
+    /// since strict deserialization drops `null` legacy keywords. Object
+    /// keywords (`properties`, single subschemas, `externalDocs`, unknown
+    /// object vocabulary and so on) merge recursively; other values replace.
+    ///
+    /// ```
+    /// use oas::SchemaValue;
+    /// use serde_json::json;
+    /// let mut schema = SchemaValue::from_lossless_value(json!({
+    ///     "type": "object",
+    ///     "properties": {"a": {"type": "string"}, "b": {}},
+    ///     "required": ["a"]
+    /// })).unwrap();
+    /// let patch = SchemaValue::from_lossless_value(json!({
+    ///     "properties": {"a": {"maxLength": 3}, "b": null},
+    ///     "required": ["a", "c"]
+    /// })).unwrap();
+    /// schema.merge_patch(&patch);
+    /// assert_eq!(serde_json::to_value(&schema).unwrap(), json!({
+    ///     "type": "object",
+    ///     "properties": {"a": {"type": "string", "maxLength": 3}},
+    ///     "required": ["a", "c"]
+    /// }));
+    /// ```
+    pub fn merge_patch(&mut self, patch: &Self) {
+        match self.merge_patch_with(patch, &mut || Ok::<(), std::convert::Infallible>(())) {
+            Ok(()) => {}
+            Err(never) => match never {},
+        }
+    }
+
+    /// [`SchemaValue::merge_patch`], calling `charge` once per patched value,
+    /// keyword or map entry. An error stops the merge and leaves the keywords
+    /// merged before it in place.
+    pub fn merge_patch_with<E>(
+        &mut self,
+        patch: &Self,
+        charge: &mut (impl FnMut() -> Result<(), E> + ?Sized),
+    ) -> Result<(), E> {
+        merge_schema(self, patch, &mut || charge())
+    }
+}
+
+fn merge_schema<E>(
+    target: &mut SchemaValue,
+    patch: &SchemaValue,
+    charge: &mut dyn FnMut() -> Result<(), E>,
+) -> Result<(), E> {
+    charge()?;
+    let SchemaValue::Object(patch) = patch else {
+        target.clone_from(patch);
+        return Ok(());
+    };
+    if target.as_object().is_none() {
+        *target = SchemaValue::Object(Box::default());
+    }
+    let SchemaValue::Object(target) = target else {
+        unreachable!("the target was made an object")
+    };
+    let result = patch
+        .keyword_names()
+        .into_iter()
+        .try_for_each(|key| target.merge_patch_keyword(key, patch, charge));
+    target.place_schema_keyword();
+    result
+}
+
+impl Schema {
+    // Merge a raw patch value into the effective value of one keyword, then
+    // place the result as decoding would: typed when it fits, else in extras.
+    fn merge_raw_keyword<E>(
+        &mut self,
+        key: &str,
+        patch: &Value,
+        charge: &mut dyn FnMut() -> Result<(), E>,
+    ) -> Result<(), E> {
+        if !patch.is_object() {
+            charge()?;
+            self.set_raw_keyword(key, patch.clone());
+            return Ok(());
+        }
+        if self.owns_keyword(key) {
+            // A typed target under a malformed object patch merges as JSON.
+            let mut value = self
+                .serialize_keyword(key, serde_json::value::Serializer)
+                .expect("a schema keyword serializes")
+                .expect("an owned keyword is present");
+            crate::merge_patch::merge_with(&mut value, patch, charge)?;
+            self.set_raw_keyword(key, value);
+            return Ok(());
+        }
+        let value = self.extras.entry(key.to_owned()).or_insert(Value::Null);
+        crate::merge_patch::merge_with(value, patch, charge)?;
+        let value = self.extras.remove(key).expect("merged above");
+        self.set_raw_keyword(key, value);
+        Ok(())
+    }
+
+    // `schema` is a subschema only beside `schemaFormat`; a merge can add or
+    // remove either keyword.
+    fn place_schema_keyword(&mut self) {
+        let wrapper = self.schema_format.is_some() || self.extras.contains_key("schemaFormat");
+        if wrapper && self.schema.is_none() {
+            if let Some(value) = self.extras.remove("schema") {
+                match child(value) {
+                    Ok(schema) => self.schema = Some(schema),
+                    Err(value) => {
+                        self.extras.insert("schema".into(), value);
+                    }
+                }
+            }
+        } else if !wrapper {
+            if let Some(schema) = self.schema.take() {
+                let value = serde_json::to_value(schema).expect("a schema serializes");
+                self.extras.insert("schema".into(), value);
+            }
         }
     }
 }
