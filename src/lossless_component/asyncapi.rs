@@ -190,32 +190,39 @@ metadata_access!(
 );
 
 macro_rules! node_children {
-    ($module:ident, $view:ident, [$($mutability:tt)?], $node:ident, $reference:ident, $values:ident, $iter:ident) => {
+    ($module:ident, $view:ident, [$($mutability:tt)?], $node:ident, $reference:ident, $iter:ident) => {
         mod $module {
             use super::*;
-            fn child<T: StructuralNode, E>(field: & $($mutability)? Field<T>, key: &str,
-                visit: &mut impl FnMut(&str, $view<'_>) -> Result<(), E>) -> Result<(), E> {
+            use crate::json_pointer::Step;
+            fn at<T: StructuralNode, E>(field: & $($mutability)? Field<T>, step: Step<'_>,
+                visit: &mut impl FnMut(Step<'_>, $view<'_>) -> Result<(), E>) -> Result<(), E> {
                 match field {
                     Field::Missing => Ok(()),
-                    Field::Invalid(value) => visit(key, $view::Raw(value)),
-                    Field::Value(value) => visit(key, value.$node()),
+                    Field::Invalid(value) => visit(step, $view::Raw(value)),
+                    Field::Value(value) => visit(step, value.$node()),
                 }
             }
-            // Map entries and list elements are visited under their declaring field name.
+            fn child<T: StructuralNode, E>(field: & $($mutability)? Field<T>, key: &str,
+                visit: &mut impl FnMut(Step<'_>, $view<'_>) -> Result<(), E>) -> Result<(), E> {
+                at(field, Step::Token(key), visit)
+            }
+            // A malformed collection is one raw child under its declaring field name.
             fn children<T: StructuralNode, E>(field: & $($mutability)? Field<Fields<T>>, key: &str,
-                visit: &mut impl FnMut(&str, $view<'_>) -> Result<(), E>) -> Result<(), E> {
+                visit: &mut impl FnMut(Step<'_>, $view<'_>) -> Result<(), E>) -> Result<(), E> {
                 match field {
                     Field::Missing => Ok(()),
-                    Field::Invalid(value) => visit(key, $view::Raw(value)),
-                    Field::Value(values) => values.$values().try_for_each(|value| child(value, key, visit)),
+                    Field::Invalid(value) => visit(Step::Token(key), $view::Raw(value)),
+                    Field::Value(values) => values.$iter()
+                        .try_for_each(|(name, value)| at(value, Step::Entry { field: key, key: name }, visit)),
                 }
             }
             fn elements<T: StructuralNode, E>(field: & $($mutability)? Field<List<T>>, key: &str,
-                visit: &mut impl FnMut(&str, $view<'_>) -> Result<(), E>) -> Result<(), E> {
+                visit: &mut impl FnMut(Step<'_>, $view<'_>) -> Result<(), E>) -> Result<(), E> {
                 match field {
                     Field::Missing => Ok(()),
-                    Field::Invalid(value) => visit(key, $view::Raw(value)),
-                    Field::Value(values) => values.$iter().try_for_each(|value| child(value, key, visit)),
+                    Field::Invalid(value) => visit(Step::Token(key), $view::Raw(value)),
+                    Field::Value(values) => values.$iter().enumerate()
+                        .try_for_each(|(index, value)| at(value, Step::Element { field: key, index }, visit)),
                 }
             }
             impl $view<'_> {
@@ -243,18 +250,26 @@ macro_rules! node_children {
                 }
                 /// Visit immediate structural children in lexical order. Schema contents
                 /// use the schema visitor; callers own recursion and reference policy.
+                /// Map entries and list elements are visited under their declaring field
+                /// name; use `try_for_each_child_at` for their key or index.
                 pub fn try_for_each_child<E>(& $($mutability)? self,
                     mut visit: impl FnMut(&str, $view<'_>) -> Result<(), E>) -> Result<(), E> {
+                    self.try_for_each_child_at(|step, child| visit(step.name(), child))
+                }
+
+                /// Visit the children of `try_for_each_child`, in the same order, with
+                /// the [`Step`] that locates each one under this node: `/field` for a
+                /// field, `/field/key` for a map entry and `/field/index` for a list
+                /// element. A malformed collection is one `Raw` child at `/field`.
+                /// [`Step::name`] is the name `try_for_each_child` reports.
+                pub fn try_for_each_child_at<E>(& $($mutability)? self,
+                    mut visit: impl FnMut(Step<'_>, $view<'_>) -> Result<(), E>) -> Result<(), E> {
                     match self {
                         Self::Metadata(value) => {
                             child(& $($mutability)? value.bindings, "bindings", &mut visit)?;
                             child(& $($mutability)? value.correlation_id, "correlationId", &mut visit)?;
                             child(& $($mutability)? value.external_docs, "externalDocs", &mut visit)?;
-                            match & $($mutability)? value.tags {
-                                Field::Missing => {},
-                                Field::Invalid(value) => visit("tags", $view::Raw(value))?,
-                                Field::Value(values) => for value in values { child(value, "tags", &mut visit)?; },
-                            }
+                            elements(& $($mutability)? value.tags, "tags", &mut visit)?;
                         }
                         Self::Tag(value) => child(& $($mutability)? value.external_docs, "externalDocs", &mut visit)?,
                         Self::Parameter(value) => child(& $($mutability)? value.schema, "schema", &mut visit)?,
@@ -359,8 +374,8 @@ macro_rules! node_children {
         }
     };
 }
-node_children!(borrowed_children, Node, [], node, reference, values, iter);
-node_children!(editable_children, NodeMut, [mut], node_mut, reference_mut, values_mut, iter_mut);
+node_children!(borrowed_children, Node, [], node, reference, iter);
+node_children!(editable_children, NodeMut, [mut], node_mut, reference_mut, iter_mut);
 
 /// Look up structure using already decoded tokens, without following references.
 pub trait NodeLookup {

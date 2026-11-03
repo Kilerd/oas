@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- `json_pointer::Step` locates a child under its parent: a field, a map entry with its key, or an array element with its index. It writes an escaped pointer suffix and pushes unescaped tokens.
+- Keyed child visitors: `try_for_each_child_at` on the lossless OpenAPI and AsyncAPI `Node` / `NodeMut`, and `Schema::try_for_each_child_at` / `try_for_each_child_mut_at`. They visit the same children in the same order as the unkeyed visitors, whose behavior is unchanged.
+
 ## [0.4.2-dev] - 2026-11-02
 
 ### Added

@@ -1,4 +1,5 @@
 //! Structural schema access without walking instance data or resolving references.
+use crate::json_pointer::Step;
 use crate::{Schema, SchemaDependency, SchemaItems, SchemaValue};
 use serde::{Deserialize, Deserializer, Serialize};
 
@@ -89,6 +90,46 @@ macro_rules! visit_typed_children {
                 SchemaDependency::Required(_) => None,
             }
         }), &mut $visit)?;
+    };
+    ($other:ident, $($args:tt)*) => {};
+}
+
+// The keyed counterpart of `visit_typed_children`: the same children in the same
+// order, each with the step that locates it under its schema.
+macro_rules! visit_keyed_children {
+    (legacy_child, $($args:tt)*) => { visit_keyed_children!(child, $($args)*) };
+    (child, $field:expr, $key:expr, $visit:ident, $iter:ident, $borrow:ident) => {
+        for child in $field.$iter().map(Box::$borrow) {
+            $visit(Step::Token($key), child)?;
+        }
+    };
+    (schema_map, $field:expr, $key:expr, $visit:ident, $iter:ident, $borrow:ident) => {
+        for (name, child) in $field.$iter().flat_map(|map| map.$iter()) {
+            $visit(Step::Entry { field: $key, key: name }, child)?;
+        }
+    };
+    (schema_array, $field:expr, $key:expr, $visit:ident, $iter:ident, $borrow:ident) => {
+        for (index, child) in $field.$iter().flatten().enumerate() {
+            $visit(Step::Element { field: $key, index }, child)?;
+        }
+    };
+    (items, $field:expr, $key:expr, $visit:ident, $iter:ident, $borrow:ident) => {
+        match $field.$borrow() {
+            Some(SchemaItems::Schema(child)) => $visit(Step::Token($key), child)?,
+            Some(SchemaItems::Tuple(children)) => {
+                for (index, child) in children.$iter().enumerate() {
+                    $visit(Step::Element { field: $key, index }, child)?;
+                }
+            }
+            None => {}
+        }
+    };
+    (dependencies, $field:expr, $key:expr, $visit:ident, $iter:ident, $borrow:ident) => {
+        for (name, dependency) in $field.$iter().flat_map(|map| map.$iter()) {
+            if let SchemaDependency::Schema(child) = dependency {
+                $visit(Step::Entry { field: $key, key: name }, child)?;
+            }
+        }
     };
     ($other:ident, $($args:tt)*) => {};
 }
@@ -190,6 +231,49 @@ macro_rules! implement_schema_access {
                     match keyword {
                         $($(#[$attr])* $key => {
                             visit_typed_children!($kind, self.$field, $key, visit, iter_mut, values_mut, as_mut);
+                        },)*
+                        _ => unreachable!("keyword comes from the schema vocabulary"),
+                    }
+                }
+                Ok(())
+            }
+
+            /// Borrow immediate schema children with the [`Step`] that locates each
+            /// one: `/keyword` for a single child, `/keyword/name` for a map entry and
+            /// `/keyword/index` for an array element. Children and their order are
+            /// those of [`Schema::try_for_each_child_with_keyword`], whose keyword is
+            /// [`Step::name`]. This does not recurse or resolve references.
+            pub fn try_for_each_child_at<E>(
+                &self,
+                mut visit: impl FnMut(Step<'_>, &SchemaValue) -> Result<(), E>,
+            ) -> Result<(), E> {
+                let mut keywords = [$($(#[$attr])* $key,)*];
+                keywords.sort_unstable();
+                for keyword in keywords {
+                    if !self.is_schema_child_keyword(keyword) { continue; }
+                    match keyword {
+                        $($(#[$attr])* $key => {
+                            visit_keyed_children!($kind, self.$field, $key, visit, iter, as_ref);
+                        },)*
+                        _ => unreachable!("keyword comes from the schema vocabulary"),
+                    }
+                }
+                Ok(())
+            }
+
+            /// The editable form of [`Schema::try_for_each_child_at`]. An error
+            /// leaves edits to earlier children in place.
+            pub fn try_for_each_child_mut_at<E>(
+                &mut self,
+                mut visit: impl FnMut(Step<'_>, &mut SchemaValue) -> Result<(), E>,
+            ) -> Result<(), E> {
+                let mut keywords = [$($(#[$attr])* $key,)*];
+                keywords.sort_unstable();
+                for keyword in keywords {
+                    if !self.is_schema_child_keyword(keyword) { continue; }
+                    match keyword {
+                        $($(#[$attr])* $key => {
+                            visit_keyed_children!($kind, self.$field, $key, visit, iter_mut, as_mut);
                         },)*
                         _ => unreachable!("keyword comes from the schema vocabulary"),
                     }

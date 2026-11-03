@@ -98,7 +98,11 @@ fields, and handle `SchemaValue::Boolean` separately. Structural keywords such a
 `properties`, `required`, `$defs`, and `anyOf` have typed fields. Unknown vocabulary
 and literal payloads remain in `Schema.extras`. Use `try_for_each_child_mut` to
 visit immediate schema children without traversing examples or defaults; callers
-control recursion and reference resolution. The optional
+control recursion and reference resolution. `try_for_each_child_at` and
+`try_for_each_child_mut_at` also report each child's `json_pointer::Step` (its
+keyword, map key or array index), so a recursive caller can build the JSON
+Pointer of every schema it visits; the lossless document nodes offer the same
+keyed visitor. The optional
 `lossless-schema-keywords` feature, first packaged in `0.4.2-dev`, retains
 formerly opaque values during typed edits. See the [migration guide](MIGRATION.md)
 for the field-access changes and stricter parsing of these keywords.

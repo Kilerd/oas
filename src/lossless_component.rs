@@ -652,9 +652,10 @@ impl SchemaLookup for Component {
 
 /// Borrowed structural views share one child inventory. Literal payloads are excluded.
 macro_rules! node_view {
-    ($module:ident, $view:ident, [$($mutability:tt)?], $node:ident, $reference:ident, $values:ident) => {
+    ($module:ident, $view:ident, [$($mutability:tt)?], $node:ident, $reference:ident, $iter:ident) => {
         mod $module {
             use super::*;
+            use crate::json_pointer::Step;
             pub enum $view<'a> {
                 Schema(&'a $($mutability)? SchemaValue),
                 Response(&'a $($mutability)? Response),
@@ -675,28 +676,35 @@ macro_rules! node_view {
                 Paths(&'a $($mutability)? Paths),
                 Invalid(&'a $($mutability)? Value),
             }
-            fn child<T: StructuralNode, E>(
+            fn at<T: StructuralNode, E>(
                 field: & $($mutability)? Field<T>,
-                key: &str,
-                visit: &mut impl FnMut(&str, $view<'_>) -> Result<(), E>,
+                step: Step<'_>,
+                visit: &mut impl FnMut(Step<'_>, $view<'_>) -> Result<(), E>,
             ) -> Result<(), E> {
                 match field {
                     Field::Missing => Ok(()),
-                    Field::Value(value) => visit(key, value.$node()),
-                    Field::Invalid(value) => visit(key, $view::Invalid(value)),
+                    Field::Value(value) => visit(step, value.$node()),
+                    Field::Invalid(value) => visit(step, $view::Invalid(value)),
                 }
+            }
+            fn child<T: StructuralNode, E>(
+                field: & $($mutability)? Field<T>,
+                key: &str,
+                visit: &mut impl FnMut(Step<'_>, $view<'_>) -> Result<(), E>,
+            ) -> Result<(), E> {
+                at(field, Step::Token(key), visit)
             }
             fn children<T: StructuralNode, E>(
                 field: & $($mutability)? Field<Fields<T>>,
                 key: &str,
-                visit: &mut impl FnMut(&str, $view<'_>) -> Result<(), E>,
+                visit: &mut impl FnMut(Step<'_>, $view<'_>) -> Result<(), E>,
             ) -> Result<(), E> {
                 match field {
                     Field::Missing => Ok(()),
-                    Field::Invalid(value) => visit(key, $view::Invalid(value)),
+                    Field::Invalid(value) => visit(Step::Token(key), $view::Invalid(value)),
                     Field::Value(values) => {
-                        for value in values.$values() {
-                            child(value, key, visit)?;
+                        for (name, value) in values.$iter() {
+                            at(value, Step::Entry { field: key, key: name }, visit)?;
                         }
                         Ok(())
                     }
@@ -705,14 +713,14 @@ macro_rules! node_view {
             fn elements<T: StructuralNode, E>(
                 field: & $($mutability)? Field<List<T>>,
                 key: &str,
-                visit: &mut impl FnMut(&str, $view<'_>) -> Result<(), E>,
+                visit: &mut impl FnMut(Step<'_>, $view<'_>) -> Result<(), E>,
             ) -> Result<(), E> {
                 match field {
                     Field::Missing => Ok(()),
-                    Field::Invalid(value) => visit(key, $view::Invalid(value)),
+                    Field::Invalid(value) => visit(Step::Token(key), $view::Invalid(value)),
                     Field::Value(values) => {
-                        for value in values {
-                            child(value, key, visit)?;
+                        for (index, value) in values.$iter().enumerate() {
+                            at(value, Step::Element { field: key, index }, visit)?;
                         }
                         Ok(())
                     }
@@ -737,9 +745,25 @@ macro_rules! node_view {
                 /// Visit immediate document children in lexical field/map order. Schema
                 /// children are exposed by Schema's visitor; literal payloads are not children.
                 /// The caller owns recursion, policy, depth and accounting.
+                ///
+                /// A map entry or list element is reported under the name of its field;
+                /// use `try_for_each_child_at` for its key or index.
                 pub fn try_for_each_child<E>(
                     & $($mutability)? self,
                     mut visit: impl FnMut(&str, $view<'_>) -> Result<(), E>,
+                ) -> Result<(), E> {
+                    self.try_for_each_child_at(|step, child| visit(step.name(), child))
+                }
+
+                /// Visit the children of `try_for_each_child`, in the same order, with
+                /// the [`Step`] that locates each one under this node: `/field` for a
+                /// field, `/field/key` for a map entry, `/field/index` for a list element
+                /// and `/key` for an entry of `Paths`, `Responses` or a `Callback`. A
+                /// malformed collection is one `Invalid` child at `/field`.
+                /// [`Step::name`] is the name `try_for_each_child` reports.
+                pub fn try_for_each_child_at<E>(
+                    & $($mutability)? self,
+                    mut visit: impl FnMut(Step<'_>, $view<'_>) -> Result<(), E>,
                 ) -> Result<(), E> {
                     match self {
                         Self::Response(v) => {
@@ -826,8 +850,8 @@ macro_rules! node_view {
         pub use $module::$view;
     };
 }
-node_view!(borrowed, Node, [], node, reference, values);
-node_view!(editable, NodeMut, [mut], node_mut, reference_mut, values_mut);
+node_view!(borrowed, Node, [], node, reference, iter);
+node_view!(editable, NodeMut, [mut], node_mut, reference_mut, iter_mut);
 
 pub trait StructuralNode {
     fn node(&self) -> Node<'_>;
