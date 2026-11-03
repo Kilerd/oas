@@ -5,7 +5,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 Rust OpenAPI models with Serde serialization and builders for constructing and
-editing API descriptions. The `0.4.2-dev` prerelease preserves retained-object
+editing API descriptions. The `0.4.3-dev` prerelease preserves retained-object
 metadata and reference annotations during typed edits. It includes schema type
 unions, boolean schemas, references with sibling keywords, and OpenAPI 3.2
 streaming media types, including Server-Sent Events (SSE).
@@ -20,7 +20,7 @@ changes and remaining model differences.
 
 ```toml
 [dependencies]
-oas = "=0.4.2-dev"
+oas = "=0.4.3-dev"
 serde_json = "1"
 ```
 
@@ -218,7 +218,7 @@ round trip for unsupported fields.
 
 ## More examples and documentation
 
-- [API reference for 0.4.2-dev](https://docs.rs/oas/0.4.2-dev/oas/)
+- [API reference for 0.4.3-dev](https://docs.rs/oas/0.4.3-dev/oas/)
 - [Usage guide](https://github.com/Kilerd/oas/blob/main/USAGE_GUIDE.md) for builders, operations, parameters, and reusable components
 - [Basic builder example](https://github.com/Kilerd/oas/blob/main/examples/easy_usage.rs)
 - [Complete API example](https://github.com/Kilerd/oas/blob/main/examples/comprehensive_example.rs)

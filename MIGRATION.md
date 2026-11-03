@@ -100,7 +100,7 @@ fields while retaining values that cannot be represented without changing them:
 
 ```toml
 [dependencies]
-oas = { version = "=0.4.2-dev", features = ["lossless-schema-keywords"] }
+oas = { version = "=0.4.3-dev", features = ["lossless-schema-keywords"] }
 ```
 
 This feature is first packaged in `0.4.2-dev`. It is disabled by default.
