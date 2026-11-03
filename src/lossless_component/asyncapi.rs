@@ -111,6 +111,85 @@ node!(metadata_access OauthFlow {
     refresh_url: String => "refreshUrl", available_scopes: Fields<String> => "availableScopes"
 });
 
+// A trait and the object it applies to. Every trait field is listed, so the
+// conversion cannot drop one.
+macro_rules! traits {
+    ($target:ident, $source:ident { $($field:ident),* $(,)? }) => {
+        /// The trait as the object it applies to, serializing identically. Trait
+        /// fields move; unknown trait keys that the target declares decode into
+        /// the target's fields, as they would from JSON, and the rest stay in extras.
+        impl From<$source> for $target {
+            fn from(source: $source) -> Self {
+                let $source { $($field,)* extras } = source;
+                let mut target = Self::decode(Value::Object(extras.into_iter().collect()))
+                    .expect("an object decodes");
+                $(target.$field = $field;)*
+                target
+            }
+        }
+
+        impl $target {
+            /// Apply resolved traits by the AsyncAPI 3.0 traits merge mechanism:
+            /// starting from an empty object, each trait is merged in declaration
+            /// order and this object last, so its own fields win. With
+            /// [`MergePatch`](crate::merge_patch::MergePatch) every step is an
+            /// RFC 7386 merge, and the result serializes as the JSON merge would.
+            ///
+            /// Resolving trait references is the caller's policy: a trait's `$ref`
+            /// is merged like any other key, and this object's `traits` field is
+            /// merged as one of its own fields rather than read. Without traits
+            /// nothing is merged. An error leaves this object unchanged.
+            pub fn merge_traits<P: MetadataPatch>(
+                &mut self,
+                traits: impl IntoIterator<Item = $source>,
+                policy: &mut P,
+            ) -> Result<(), P::Error> {
+                let mut traits = traits.into_iter().peekable();
+                if traits.peek().is_none() {
+                    return Ok(());
+                }
+                let mut merged = Self::default();
+                for item in traits {
+                    merged.patch_metadata(&Self::from(item), policy)?;
+                }
+                merged.patch_metadata(self, policy)?;
+                *self = merged;
+                Ok(())
+            }
+        }
+    };
+}
+traits!(
+    Message,
+    MessageTrait {
+        reference,
+        headers,
+        correlation_id,
+        content_type,
+        name,
+        title,
+        summary,
+        description,
+        tags,
+        external_docs,
+        bindings,
+        examples,
+    }
+);
+traits!(
+    Operation,
+    OperationTrait {
+        reference,
+        title,
+        summary,
+        description,
+        security,
+        tags,
+        external_docs,
+        bindings,
+    }
+);
+
 macro_rules! node_views {
     ($($variant:ident => $ty:ty),* $(,)?) => {
         /// Borrowed structure. Raw values are unknown vocabulary or deferred invalid fields.
