@@ -7,6 +7,102 @@ use serde::{
 use serde_json::{Map, Value};
 use std::collections::BTreeMap;
 
+// Typed access to `properties` and `required`. Each accessor reads the effective
+// value: the typed field when present, otherwise a malformed value retained in
+// `extras`, which is returned as `Err` and never discarded or replaced.
+impl Schema {
+    /// The effective `properties`: `Ok(None)` when absent, `Ok(Some)` when it is
+    /// an object, and `Err` with the retained value when it is not.
+    pub fn properties_map(&self) -> Result<Option<&BTreeMap<String, SchemaValue>>, &Value> {
+        match (&self.properties, self.extras.get("properties")) {
+            (Some(properties), _) => Ok(Some(properties)),
+            (None, Some(raw)) => Err(raw),
+            (None, None) => Ok(None),
+        }
+    }
+
+    /// The editable form of [`Schema::properties_map`].
+    pub fn properties_map_mut(
+        &mut self,
+    ) -> Result<Option<&mut BTreeMap<String, SchemaValue>>, &mut Value> {
+        if self.properties.is_none() {
+            if let Some(raw) = self.extras.get_mut("properties") {
+                return Err(raw);
+            }
+        }
+        Ok(self.properties.as_mut())
+    }
+
+    /// The effective `properties`, inserting an empty map when absent. A
+    /// malformed value is returned as `Err` and the schema is unchanged.
+    ///
+    /// ```
+    /// use oas::{Schema, SchemaValue};
+    /// use serde_json::json;
+    /// let mut headers = SchemaValue::from_lossless_value(json!({"type": "object"})).unwrap();
+    /// let headers = headers.as_object_mut().unwrap();
+    /// headers.properties_map_or_insert().unwrap().insert("model".into(), Schema::string().into());
+    /// assert!(headers.insert_required_name("model").unwrap());
+    /// assert_eq!(serde_json::to_value(&*headers).unwrap(), json!({
+    ///     "type": "object",
+    ///     "properties": {"model": {"type": "string"}},
+    ///     "required": ["model"]
+    /// }));
+    /// ```
+    pub fn properties_map_or_insert(
+        &mut self,
+    ) -> Result<&mut BTreeMap<String, SchemaValue>, &mut Value> {
+        if self.properties.is_none() {
+            if let Some(raw) = self.extras.get_mut("properties") {
+                return Err(raw);
+            }
+        }
+        Ok(self.properties.get_or_insert_with(BTreeMap::new))
+    }
+
+    /// The effective `required`: `Ok(None)` when absent, `Ok(Some)` when it is
+    /// an array of strings, and `Err` with the retained value otherwise.
+    pub fn required_names(&self) -> Result<Option<&[String]>, &Value> {
+        match (&self.required, self.extras.get("required")) {
+            (Some(required), _) => Ok(Some(required)),
+            (None, Some(raw)) => Err(raw),
+            (None, None) => Ok(None),
+        }
+    }
+
+    /// The editable form of [`Schema::required_names`].
+    pub fn required_names_mut(&mut self) -> Result<Option<&mut Vec<String>>, &mut Value> {
+        if self.required.is_none() {
+            if let Some(raw) = self.extras.get_mut("required") {
+                return Err(raw);
+            }
+        }
+        Ok(self.required.as_mut())
+    }
+
+    /// The effective `required`, inserting an empty array when absent. A
+    /// malformed value is returned as `Err` and the schema is unchanged.
+    pub fn required_names_or_insert(&mut self) -> Result<&mut Vec<String>, &mut Value> {
+        if self.required.is_none() {
+            if let Some(raw) = self.extras.get_mut("required") {
+                return Err(raw);
+            }
+        }
+        Ok(self.required.get_or_insert_with(Vec::new))
+    }
+
+    /// Append `name` to the effective `required` unless it is already a member,
+    /// returning whether it was appended. A malformed value is returned as `Err`.
+    pub fn insert_required_name(&mut self, name: &str) -> Result<bool, &mut Value> {
+        let required = self.required_names_or_insert()?;
+        if required.iter().any(|member| member == name) {
+            return Ok(false);
+        }
+        required.push(name.to_owned());
+        Ok(true)
+    }
+}
+
 impl Schema {
     /// Test string membership in the effective `required` array.
     /// Typed assignments shadow extras; malformed elements do not match a name.

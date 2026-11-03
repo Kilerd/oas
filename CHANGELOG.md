@@ -12,6 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Keyed child visitors: `try_for_each_child_at` on the lossless OpenAPI and AsyncAPI `Node` / `NodeMut`, and `Schema::try_for_each_child_at` / `try_for_each_child_mut_at`. They visit the same children in the same order as the unkeyed visitors, whose behavior is unchanged.
 - `merge_patch::merge` and `merge_with` apply an RFC 7386 JSON Merge Patch to a `serde_json::Value`; `merge_with` charges each patched value to a caller callback.
 - With `lossless-schema-keywords`: `merge_patch::MergePatch`, an RFC 7386 `MetadataPatch` policy for `patch_metadata`, and `SchemaValue::merge_patch` / `merge_patch_with`, a typed schema merge whose result serializes as the JSON merge and keeps the typed placement of a fresh lossless decode.
+- With `lossless-schema-keywords`: typed `properties` / `required` access on `Schema` that keeps malformed values. `properties_map`, `properties_map_mut`, `properties_map_or_insert`, `required_names`, `required_names_mut`, `required_names_or_insert` and `insert_required_name` return the effective typed value, or `Err` with a malformed value retained in `extras`, which they never replace.
 
 ## [0.4.2-dev] - 2026-11-02
 
