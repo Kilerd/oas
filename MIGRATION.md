@@ -24,6 +24,21 @@ coverage. The remaining differences are listed below.
   unchanged 0.2 API should remain on `oas = "0.2"`.
   [Version 0.3.0](https://crates.io/crates/oas/0.3.0) was published on 2026-09-14.
 
+## Unreleased: boxed Path Item operations
+
+`PathItem` stores its eight operations as `Option<Box<Operation>>` instead of
+`Option<Operation>`, so an empty path item costs eight pointers rather than eight
+inline `Operation` objects. This is a source-breaking change for struct literals,
+direct field assignments, and destructuring; the JSON representation is unchanged
+because `Box` is transparent to Serde.
+
+- Construct or replace a field with `Box::new(operation)`, for example
+  `path.get = Some(Box::new(operation))`. `PathItem::with_get` and the other
+  `with_*` builders box the operation for you.
+- Destructuring `PathItem { get, .. }` now yields `Option<Box<Operation>>`.
+  Borrowed field access still dereferences automatically, so
+  `path.get.as_ref().unwrap().summary` continues to compile.
+
 ## 0.4.0-dev: Tag builder change
 
 `Tag::with_description` now consumes an existing tag, matching the other

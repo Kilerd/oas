@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- `PathItem` stores each operation as `Option<Box<Operation>>`, so an empty path item no longer carries eight inline `Operation` objects. A document of empty path items used to amplify its JSON size by hundreds of times. The JSON representation is unchanged; Rust struct literals and direct field assignments now need `Box::new`.
+
 ## [0.4.3-dev] - 2026-11-03
 
 ### Added

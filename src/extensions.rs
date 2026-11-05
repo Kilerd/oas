@@ -201,27 +201,27 @@ impl PathItem {
     }
 
     pub fn with_get(mut self, operation: Operation) -> Self {
-        self.get = Some(operation);
+        self.get = Some(Box::new(operation));
         self
     }
 
     pub fn with_post(mut self, operation: Operation) -> Self {
-        self.post = Some(operation);
+        self.post = Some(Box::new(operation));
         self
     }
 
     pub fn with_put(mut self, operation: Operation) -> Self {
-        self.put = Some(operation);
+        self.put = Some(Box::new(operation));
         self
     }
 
     pub fn with_delete(mut self, operation: Operation) -> Self {
-        self.delete = Some(operation);
+        self.delete = Some(Box::new(operation));
         self
     }
 
     pub fn with_patch(mut self, operation: Operation) -> Self {
-        self.patch = Some(operation);
+        self.patch = Some(Box::new(operation));
         self
     }
 }
@@ -715,14 +715,14 @@ impl PathItem {
     pub fn with_operations(mut self, operations: Vec<(&str, Operation)>) -> Self {
         for (method, operation) in operations {
             match method.to_lowercase().as_str() {
-                "get" => self.get = Some(operation),
-                "post" => self.post = Some(operation),
-                "put" => self.put = Some(operation),
-                "delete" => self.delete = Some(operation),
-                "patch" => self.patch = Some(operation),
-                "options" => self.options = Some(operation),
-                "head" => self.head = Some(operation),
-                "trace" => self.trace = Some(operation),
+                "get" => self.get = Some(Box::new(operation)),
+                "post" => self.post = Some(Box::new(operation)),
+                "put" => self.put = Some(Box::new(operation)),
+                "delete" => self.delete = Some(Box::new(operation)),
+                "patch" => self.patch = Some(Box::new(operation)),
+                "options" => self.options = Some(Box::new(operation)),
+                "head" => self.head = Some(Box::new(operation)),
+                "trace" => self.trace = Some(Box::new(operation)),
                 _ => {} // Ignore unknown methods
             }
         }

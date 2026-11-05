@@ -368,6 +368,10 @@ pub struct Components {
 }
 
 /// Describes the operations available on a single path.
+///
+/// Operations are boxed so an empty path item costs eight pointers instead of
+/// eight inline operation objects; a document of empty path items otherwise
+/// amplifies its JSON size by hundreds of times.
 #[skip_serializing_none]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PathItem {
@@ -379,21 +383,21 @@ pub struct PathItem {
     /// An optional, string description, intended to apply to all operations in this path.
     pub description: Option<String>,
     /// A definition of a GET operation on this path.
-    pub get: Option<Operation>,
+    pub get: Option<Box<Operation>>,
     /// A definition of a PUT operation on this path.
-    pub put: Option<Operation>,
+    pub put: Option<Box<Operation>>,
     /// A definition of a POST operation on this path.
-    pub post: Option<Operation>,
+    pub post: Option<Box<Operation>>,
     /// A definition of a DELETE operation on this path.
-    pub delete: Option<Operation>,
+    pub delete: Option<Box<Operation>>,
     /// A definition of a OPTIONS operation on this path.
-    pub options: Option<Operation>,
+    pub options: Option<Box<Operation>>,
     /// A definition of a HEAD operation on this path.
-    pub head: Option<Operation>,
+    pub head: Option<Box<Operation>>,
     /// A definition of a PATCH operation on this path.
-    pub patch: Option<Operation>,
+    pub patch: Option<Box<Operation>>,
     /// A definition of a TRACE operation on this path.
-    pub trace: Option<Operation>,
+    pub trace: Option<Box<Operation>>,
     /// An alternative `server` array to service all operations in this path.
     pub servers: Option<Vec<Server>>,
     /// A list of parameters that are applicable for all the operations described under this path.

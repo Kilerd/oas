@@ -93,6 +93,11 @@ pub(super) fn optional<T: Admit>(field: Field<T>) -> Result<Option<T::Output>> {
         _ => required(field).map(Some),
     }
 }
+/// Admit a boxed subtree, re-boxing it for strict fields that own operations
+/// behind a pointer so empty path items do not carry eight inline operations.
+fn optional_boxed<T: Admit>(field: Field<Box<T>>) -> Result<Option<Box<T::Output>>> {
+    optional(field).map(|value| value.map(Box::new))
+}
 fn security(
     field: Field<List<Fields<List<String>>>>,
 ) -> Result<Option<Vec<crate::SecurityRequirement>>> {
@@ -140,6 +145,9 @@ macro_rules! check_field {
         required_check($field)
     };
     (optional, $field:expr) => {
+        optional_check($field)
+    };
+    (optional_boxed, $field:expr) => {
         optional_check($field)
     };
     (security, $field:expr) => {
@@ -253,8 +261,9 @@ plain!(ExternalDocumentation);
 
 inline!(PathItem {
     _ref: optional(reference), summary: optional(summary), description: optional(description),
-    get: optional(get), put: optional(put), post: optional(post), delete: optional(delete),
-    options: optional(options), head: optional(head), patch: optional(patch), trace: optional(trace),
+    get: optional_boxed(get), put: optional_boxed(put), post: optional_boxed(post),
+    delete: optional_boxed(delete), options: optional_boxed(options), head: optional_boxed(head),
+    patch: optional_boxed(patch), trace: optional_boxed(trace),
     servers: optional(servers), parameters: optional(parameters)
 } extras |node| { std::mem::take(&mut node.extras) });
 plain!(PathItem);
