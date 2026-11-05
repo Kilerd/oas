@@ -10,6 +10,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 - `PathItem` stores each operation as `Option<Box<Operation>>`, so an empty path item no longer carries eight inline `Operation` objects. A document of empty path items used to amplify its JSON size by hundreds of times. The JSON representation is unchanged; Rust struct literals and direct field assignments now need `Box::new`.
 
+### Fixed
+- Decoding a nested schema no longer copies its whole subtree at every level. A 1.8 MB document with a 900k-entry `enum` under a schema nested 100 levels deep peaked at about 5.9 GB; it now peaks at about 48 MB at every depth. Serialized output is unchanged.
+
 ## [0.4.3-dev] - 2026-11-03
 
 ### Added

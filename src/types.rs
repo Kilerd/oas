@@ -817,15 +817,52 @@ impl From<Vec<String>> for SchemaType {
 /// let referenced = Schema::reference("#/components/schemas/Event")
 ///     .with_description("A parsed event");
 /// ```
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize)]
 #[serde(untagged)]
 pub enum SchemaValue {
     Boolean(bool),
     Object(Box<Schema>),
     /// A malformed structural child retained by lossless decoding.
     #[cfg(feature = "lossless-schema-keywords")]
-    #[serde(skip_deserializing)]
     Invalid(Any),
+}
+
+impl<'de> Deserialize<'de> for SchemaValue {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        struct SchemaVisitor;
+
+        impl<'de> serde::de::Visitor<'de> for SchemaVisitor {
+            type Value = SchemaValue;
+
+            fn expecting(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                formatter.write_str("a schema object or boolean")
+            }
+
+            fn visit_bool<E>(self, value: bool) -> Result<Self::Value, E>
+            where
+                E: serde::de::Error,
+            {
+                Ok(SchemaValue::Boolean(value))
+            }
+
+            fn visit_map<A>(self, map: A) -> Result<Self::Value, A::Error>
+            where
+                A: serde::de::MapAccess<'de>,
+            {
+                // A schema object is decoded once from its map; the derived
+                // untagged enum used to buffer the whole subtree at every
+                // nesting level, which amplified deep schemas without bound.
+                let schema =
+                    Schema::deserialize(serde::de::value::MapAccessDeserializer::new(map))?;
+                Ok(SchemaValue::Object(Box::new(schema)))
+            }
+        }
+
+        deserializer.deserialize_any(SchemaVisitor)
+    }
 }
 
 impl SchemaValue {
@@ -924,10 +961,7 @@ impl From<Referenceable<Schema>> for SchemaValue {
 /// unification applies this mode to all consumers of the crate.
 #[cfg_attr(not(feature = "lossless-schema-keywords"), skip_serializing_none)]
 #[derive(Debug, Clone, Default)]
-#[cfg_attr(
-    not(feature = "lossless-schema-keywords"),
-    derive(Serialize, Deserialize)
-)]
+#[cfg_attr(not(feature = "lossless-schema-keywords"), derive(Serialize))]
 #[cfg_attr(
     not(feature = "lossless-schema-keywords"),
     serde(rename_all = "camelCase")
