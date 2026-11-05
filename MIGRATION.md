@@ -323,17 +323,17 @@ let stream = MediaType::new().with_item_schema(Schema::reference("#/components/s
 
 ## Non-schema references
 
-`Referenceable<T>` reads an object containing only `$ref` and optional `summary` /
-`description` as `Reference`, including in nested header, example, and response
-fields. Other object shapes first try the inline `Data(T)` parser; if that fails,
-a reference with additional properties is accepted and those properties are
-retained in `Reference.extras`. For example, a parameter reference with `x-note`
-but no inline `name` / `in` remains readable. The extras map preserves arbitrary
-JSON values for document editing; those fields are not assigned additional
-OpenAPI Reference Object semantics. This fallback preserves the existing inline
-interpretation of schema siblings and generic payloads such as an Example with
-`$ref` and `value`. Schema positions use `SchemaValue`, where `$ref` and arbitrary
-sibling keywords remain part of the schema object.
+`Referenceable<T>` reads any object whose `$ref` is a string as `Reference`
+(OpenAPI 3.1 §4.8.23), including in nested header, example, response, parameter,
+request body, link, and callback fields. Properties other than `summary` and
+`description` are not assigned Reference Object semantics, but they are retained
+in `Reference.extras` for document editing, so a reference that carries extra
+properties still round-trips. An object whose `$ref` is absent or not a string
+still selects the inline `Data(T)` parser. To construct inline data that
+legitimately contains a string `$ref` member, use `Referenceable::data`.
+Schema positions use `SchemaValue`, where `$ref` and arbitrary sibling keywords
+remain part of the schema object; the legacy `Referenceable<Schema>` target keeps
+that schema-first rule as well.
 
 `Reference` has public `summary`, `description`, and `extras` fields. Complete
 struct literals and exhaustive destructuring must account for the new fields;

@@ -212,9 +212,10 @@ macro_rules! referenceable {
                 }
             }
             fn admit(self) -> Result<Self::Output> {
-                if self.valid_reference()
-                    && (self.only_reference_fields() || self.check_inline().is_err())
-                {
+                // OpenAPI 3.1 §4.8.23: a string `$ref` makes this a Reference
+                // Object. Additional properties are retained for editing but
+                // never select the inline interpretation.
+                if self.valid_reference() {
                     self.into_reference().map(crate::Referenceable::Reference)
                 } else {
                     self.admit_inline().map(crate::Referenceable::Data)
@@ -437,8 +438,9 @@ impl Admit for Callback {
         }
     }
     fn admit(self) -> Result<Self::Output> {
-        let pure = self.paths.is_empty() && self.extras.keys().all(|key| is_reference_key(key));
-        if self.valid_reference() && (pure || self.check_strict_paths().is_err()) {
+        // A string `$ref` makes this a Reference Object even when constant
+        // callback addresses are present; they stay in reference extras.
+        if self.valid_reference() {
             let mut extras = self.extras;
             let summary = optional(Field::<String>::from_value(
                 extras.remove("summary").unwrap_or(Value::Null),

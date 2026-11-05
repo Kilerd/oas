@@ -1,5 +1,6 @@
 use oas::{
-    Example, Header, MediaType, OpenAPIV3, Reference, Referenceable, Response, Schema, SchemaValue,
+    Example, Header, MediaType, OpenAPIV3, Parameter, Reference, Referenceable, Response, Schema,
+    SchemaType, SchemaValue,
 };
 use serde_json::json;
 
@@ -262,9 +263,10 @@ fn constructors_keep_pure_reference_wire_format() {
     }
 }
 
-/// Permissive reference-first matching would reclassify schemas and application payloads.
+/// JSON Schema keeps `$ref` siblings as keywords; every other reference
+/// position follows the OpenAPI Reference Object rule.
 #[test]
-fn schema_and_inline_siblings_are_not_discarded_by_reference_matching() {
+fn schema_siblings_stay_data_and_non_schema_refs_are_references() {
     let schema = json!({
         "$ref": "#/components/schemas/Item",
         "description": "An item",
@@ -281,13 +283,19 @@ fn schema_and_inline_siblings_are_not_discarded_by_reference_matching() {
     let modern: SchemaValue = serde_json::from_value(schema.clone()).unwrap();
     assert_eq!(serde_json::to_value(modern).unwrap(), schema);
 
-    // A generic inline payload may use $ref without being a Reference Object.
+    // Outside schema positions a string `$ref` makes the object a Reference
+    // Object; extra properties are retained for editing but never parsed inline.
     let inline = json!({"$ref": "application-specific", "value": 42});
-    let example: Referenceable<Example> = serde_json::from_value(inline).unwrap();
-    assert_eq!(example.as_data().unwrap().value, Some(json!(42)));
+    let example: Referenceable<Example> = serde_json::from_value(inline.clone()).unwrap();
+    assert!(
+        example.is_reference(),
+        "an object with a string $ref must not be reclassified as inline data"
+    );
+    assert_eq!(example.as_reference().unwrap()._ref, "application-specific");
+    assert_eq!(serde_json::to_value(example).unwrap(), inline);
     let literal = json!({"$ref": "literal", "x-public": {"$ref": "nested", "order": [2, 1]}});
     let inline: Referenceable<serde_json::Value> = serde_json::from_value(literal.clone()).unwrap();
-    assert!(inline.is_data());
+    assert!(inline.is_reference());
     assert_eq!(serde_json::to_value(inline).unwrap(), literal);
     let inline: Referenceable<serde_json::Value> =
         Referenceable::data(json!({"$ref": "application-specific", "value": 42}));
@@ -297,6 +305,67 @@ fn schema_and_inline_siblings_are_not_discarded_by_reference_matching() {
             "$ref": "application-specific", "value": 42
         })
     );
+}
+
+/// OpenAPI 3.1 §4.8.23: a Reference Object cannot be extended, so properties
+/// that would fit the inline object must not reclassify it as data.
+#[test]
+fn reference_objects_with_extra_properties_stay_references() {
+    let input = json!({
+        "$ref": "#/components/responses/NotFound",
+        "description": "nf",
+        "x-note": 1
+    });
+    let response: Referenceable<Response> = serde_json::from_value(input.clone()).unwrap();
+    assert!(
+        response.is_reference(),
+        "a response with `$ref` and a description is a Reference Object, not an inline response"
+    );
+    let reference = response.as_reference().unwrap();
+    assert_eq!(reference._ref, "#/components/responses/NotFound");
+    assert_eq!(reference.description.as_deref(), Some("nf"));
+    assert_eq!(reference.extras["x-note"], json!(1));
+    assert_eq!(serde_json::to_value(&response).unwrap(), input);
+
+    let header: Referenceable<Header> = serde_json::from_value(json!({
+        "$ref": "#/components/headers/Rate", "x-note": 1
+    }))
+    .unwrap();
+    assert!(header.is_reference());
+
+    let parameter: Referenceable<Parameter> = serde_json::from_value(json!({
+        "$ref": "#/components/parameters/Id", "name": "q", "in": "query", "x-note": 1
+    }))
+    .unwrap();
+    assert!(parameter.is_reference());
+
+    // A non-string `$ref` is not a Reference Object; the inline object wins.
+    let inline: Referenceable<Response> = serde_json::from_value(json!({
+        "$ref": null, "description": "ok"
+    }))
+    .unwrap();
+    assert!(inline.is_data());
+
+    // JSON Schema 2020-12 gives `$ref` siblings meaning, so schema positions
+    // keep the sibling keywords as schema fields.
+    let schema = json!({
+        "$ref": "#/components/schemas/Item",
+        "description": "an item",
+        "type": "object",
+        "x-note": 1
+    });
+    let value: SchemaValue = serde_json::from_value(schema.clone()).unwrap();
+    let object = value
+        .as_object()
+        .expect("a schema `$ref` with siblings stays an inline schema");
+    assert_eq!(object._ref.as_deref(), Some("#/components/schemas/Item"));
+    assert_eq!(object._type, Some(SchemaType::Single("object".into())));
+    assert_eq!(serde_json::to_value(value).unwrap(), schema);
+
+    // The legacy schema target keeps the same schema-first rule.
+    let legacy: Referenceable<Schema> = serde_json::from_value(schema.clone()).unwrap();
+    assert!(legacy.is_data());
+    assert_eq!(serde_json::to_value(legacy).unwrap(), schema);
 }
 
 /// Reference parsing must remain usable with Serde inputs other than JSON text.

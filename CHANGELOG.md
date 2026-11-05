@@ -9,9 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 - `PathItem` stores each operation as `Option<Box<Operation>>`, so an empty path item no longer carries eight inline `Operation` objects. A document of empty path items used to amplify its JSON size by hundreds of times. The JSON representation is unchanged; Rust struct literals and direct field assignments now need `Box::new`.
+- `Referenceable<T>` deserializes any object whose `$ref` is a string as `Reference`, following OpenAPI 3.1 §4.8.23. Inline data that legitimately contains a string `$ref` member must be constructed with `Referenceable::data`. JSON Schema `$ref` siblings in `SchemaValue` and `Referenceable<Schema>` remain schema keywords.
 
 ### Fixed
 - Decoding a nested schema no longer copies its whole subtree at every level. A 1.8 MB document with a 900k-entry `enum` under a schema nested 100 levels deep peaked at about 5.9 GB; it now peaks at about 48 MB at every depth. Serialized output is unchanged.
+- An object with a string `$ref` no longer decodes as the inline object whose fields its extra properties happen to match. Extra reference properties remain in `Reference.extras` for editing.
 
 ## [0.4.3-dev] - 2026-11-03
 

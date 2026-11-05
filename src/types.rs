@@ -47,23 +47,101 @@ impl<'de, T: Deserialize<'de>> Deserialize<'de> for Referenceable<T> {
     where
         D: serde::Deserializer<'de>,
     {
+        if keeps_schema_reference_siblings::<T>() {
+            // JSON Schema 2020-12 makes `$ref` an ordinary keyword with
+            // sibling keywords, so a schema position keeps its schema-first
+            // rule. A strict Reference Object still selects `Reference`, and
+            // malformed inline siblings fall back to reference extras.
+            #[derive(Deserialize)]
+            #[serde(untagged)]
+            enum Candidate<T> {
+                Reference(#[serde(deserialize_with = "deserialize_reference_object")] Reference),
+                Data(T),
+                ReferenceWithAdditionalProperties(Reference),
+            }
+
+            return Ok(match Candidate::deserialize(deserializer)? {
+                Candidate::Reference(reference)
+                | Candidate::ReferenceWithAdditionalProperties(reference) => {
+                    Self::Reference(reference)
+                }
+                Candidate::Data(data) => Self::Data(data),
+            });
+        }
+
+        // OpenAPI 3.1 §4.8.23: an object whose `$ref` is a string is a
+        // Reference Object. Other properties are ignored semantically; the
+        // strict model retains them in `Reference::extras` for editing.
         #[derive(Deserialize)]
         #[serde(untagged)]
         enum Candidate<T> {
-            Reference(#[serde(deserialize_with = "deserialize_reference_object")] Reference),
+            Reference(ReferenceFirst),
             Data(T),
-            // Accept additional Reference Object properties only after giving
-            // schema siblings and generic inline payloads a chance to parse.
-            ReferenceWithAdditionalProperties(Reference),
         }
 
-        match Candidate::deserialize(deserializer)? {
-            Candidate::Reference(reference)
-            | Candidate::ReferenceWithAdditionalProperties(reference) => {
-                Ok(Self::Reference(reference))
+        Ok(match Candidate::deserialize(deserializer)? {
+            Candidate::Reference(ReferenceFirst(reference)) => Self::Reference(reference),
+            Candidate::Data(data) => Self::Data(data),
+        })
+    }
+}
+
+/// JSON Schema 2020-12 gives `$ref` sibling keywords meaning, so the legacy
+/// `Referenceable<Schema>` target keeps the schema-first rule. Every other
+/// target follows OpenAPI's Reference Object rule.
+fn keeps_schema_reference_siblings<T>() -> bool {
+    std::any::type_name::<T>() == std::any::type_name::<Schema>()
+}
+
+/// First untagged candidate: a map with a string `$ref` is a Reference
+/// Object, even when it also carries properties an inline object would accept.
+struct ReferenceFirst(Reference);
+
+impl<'de> Deserialize<'de> for ReferenceFirst {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        struct ReferenceVisitor;
+
+        impl<'de> serde::de::Visitor<'de> for ReferenceVisitor {
+            type Value = ReferenceFirst;
+
+            fn expecting(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                formatter.write_str("a Reference Object")
             }
-            Candidate::Data(data) => Ok(Self::Data(data)),
+
+            fn visit_map<A>(self, mut map: A) -> Result<Self::Value, A::Error>
+            where
+                A: serde::de::MapAccess<'de>,
+            {
+                let mut reference = None;
+                let mut summary = None;
+                let mut description = None;
+                let mut extras = BTreeMap::new();
+                while let Some(key) = map.next_key::<String>()? {
+                    match key.as_str() {
+                        "$ref" => reference = Some(map.next_value::<String>()?),
+                        "summary" => summary = map.next_value::<Option<String>>()?,
+                        "description" => description = map.next_value::<Option<String>>()?,
+                        _ => {
+                            extras.insert(key, map.next_value::<Any>()?);
+                        }
+                    }
+                }
+                match reference {
+                    Some(reference) => Ok(ReferenceFirst(Reference {
+                        _ref: reference,
+                        summary,
+                        description,
+                        extras,
+                    })),
+                    None => Err(serde::de::Error::custom("expected a Reference Object")),
+                }
+            }
         }
+
+        deserializer.deserialize_any(ReferenceVisitor)
     }
 }
 

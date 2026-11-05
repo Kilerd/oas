@@ -287,9 +287,6 @@ macro_rules! node {
                 $(admission::retain(&mut extras, $key, node.$field)?;)*
                 Ok(crate::Reference { _ref: reference, summary, description, extras })
             }
-            fn only_reference_fields(&self) -> bool {
-                self.extras.is_empty() && true $(&& (admission::is_reference_key($key) || self.$field.is_missing()))*
-            }
         }
     };
     ($name:ident { $($field:ident : $ty:ty => $key:literal),* $(,)? }) => {
