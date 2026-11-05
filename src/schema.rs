@@ -380,76 +380,77 @@ mod strict {
     where
         E: de::Error,
     {
-        let mut schema = Schema::default();
-        // Legacy fields treat JSON null as absent, like serde's `Option<T>`.
-        schema._type = legacy(fields.remove("type"), "type")?;
-        schema._ref = legacy(fields.remove("$ref"), "$ref")?;
-        schema.format = legacy(fields.remove("format"), "format")?;
-        schema.nullable = legacy(fields.remove("nullable"), "nullable")?;
-        schema.description = legacy(fields.remove("description"), "description")?;
-        schema.content_media_type = legacy(fields.remove("contentMediaType"), "contentMediaType")?;
-        schema.content_encoding = legacy(fields.remove("contentEncoding"), "contentEncoding")?;
-        schema.content_schema = legacy(fields.remove("contentSchema"), "contentSchema")?;
-        // Structural fields reject a present null or malformed value.
-        schema.properties = present(fields.remove("properties"), "properties", schema_map)?;
-        schema.pattern_properties = present(
-            fields.remove("patternProperties"),
-            "patternProperties",
-            schema_map,
-        )?;
-        schema.required = present(fields.remove("required"), "required", strings)?;
-        schema.min_properties = present(fields.remove("minProperties"), "minProperties", count)?;
-        schema.max_properties = present(fields.remove("maxProperties"), "maxProperties", count)?;
-        schema.additional_properties = present(
-            fields.remove("additionalProperties"),
-            "additionalProperties",
-            boxed_schema,
-        )?;
-        schema.unevaluated_properties = present(
-            fields.remove("unevaluatedProperties"),
-            "unevaluatedProperties",
-            boxed_schema,
-        )?;
-        schema.property_names = present(
-            fields.remove("propertyNames"),
-            "propertyNames",
-            boxed_schema,
-        )?;
-        schema.all_of = present(fields.remove("allOf"), "allOf", schema_array)?;
-        schema.any_of = present(fields.remove("anyOf"), "anyOf", schema_array)?;
-        schema.one_of = present(fields.remove("oneOf"), "oneOf", schema_array)?;
-        schema.not = present(fields.remove("not"), "not", boxed_schema)?;
-        schema.if_schema = present(fields.remove("if"), "if", boxed_schema)?;
-        schema.then_schema = present(fields.remove("then"), "then", boxed_schema)?;
-        schema.else_schema = present(fields.remove("else"), "else", boxed_schema)?;
-        schema.dependent_required = present(
-            fields.remove("dependentRequired"),
-            "dependentRequired",
-            string_map,
-        )?;
-        schema.dependent_schemas = present(
-            fields.remove("dependentSchemas"),
-            "dependentSchemas",
-            schema_map,
-        )?;
-        schema.dependencies = present(fields.remove("dependencies"), "dependencies", dependencies)?;
-        schema.defs = present(fields.remove("$defs"), "$defs", schema_map)?;
-        schema.definitions = present(fields.remove("definitions"), "definitions", schema_map)?;
-        schema.items = present(fields.remove("items"), "items", items)?;
-        schema.prefix_items = present(fields.remove("prefixItems"), "prefixItems", schema_array)?;
-        schema.additional_items = present(
-            fields.remove("additionalItems"),
-            "additionalItems",
-            boxed_schema,
-        )?;
-        schema.unevaluated_items = present(
-            fields.remove("unevaluatedItems"),
-            "unevaluatedItems",
-            boxed_schema,
-        )?;
-        schema.contains = present(fields.remove("contains"), "contains", boxed_schema)?;
-        schema.extras = fields.into_iter().collect();
-        Ok(schema)
+        // Legacy fields treat JSON null as absent, like serde's `Option<T>`;
+        // structural fields reject a present null or malformed value. `extras`
+        // is initialized last, after every declared keyword has been removed.
+        Ok(Schema {
+            _type: legacy(fields.remove("type"), "type")?,
+            _ref: legacy(fields.remove("$ref"), "$ref")?,
+            format: legacy(fields.remove("format"), "format")?,
+            nullable: legacy(fields.remove("nullable"), "nullable")?,
+            description: legacy(fields.remove("description"), "description")?,
+            content_media_type: legacy(fields.remove("contentMediaType"), "contentMediaType")?,
+            content_encoding: legacy(fields.remove("contentEncoding"), "contentEncoding")?,
+            content_schema: legacy(fields.remove("contentSchema"), "contentSchema")?,
+            properties: present(fields.remove("properties"), "properties", schema_map)?,
+            pattern_properties: present(
+                fields.remove("patternProperties"),
+                "patternProperties",
+                schema_map,
+            )?,
+            required: present(fields.remove("required"), "required", strings)?,
+            min_properties: present(fields.remove("minProperties"), "minProperties", count)?,
+            max_properties: present(fields.remove("maxProperties"), "maxProperties", count)?,
+            additional_properties: present(
+                fields.remove("additionalProperties"),
+                "additionalProperties",
+                boxed_schema,
+            )?,
+            unevaluated_properties: present(
+                fields.remove("unevaluatedProperties"),
+                "unevaluatedProperties",
+                boxed_schema,
+            )?,
+            property_names: present(
+                fields.remove("propertyNames"),
+                "propertyNames",
+                boxed_schema,
+            )?,
+            all_of: present(fields.remove("allOf"), "allOf", schema_array)?,
+            any_of: present(fields.remove("anyOf"), "anyOf", schema_array)?,
+            one_of: present(fields.remove("oneOf"), "oneOf", schema_array)?,
+            not: present(fields.remove("not"), "not", boxed_schema)?,
+            if_schema: present(fields.remove("if"), "if", boxed_schema)?,
+            then_schema: present(fields.remove("then"), "then", boxed_schema)?,
+            else_schema: present(fields.remove("else"), "else", boxed_schema)?,
+            dependent_required: present(
+                fields.remove("dependentRequired"),
+                "dependentRequired",
+                string_map,
+            )?,
+            dependent_schemas: present(
+                fields.remove("dependentSchemas"),
+                "dependentSchemas",
+                schema_map,
+            )?,
+            dependencies: present(fields.remove("dependencies"), "dependencies", dependencies)?,
+            defs: present(fields.remove("$defs"), "$defs", schema_map)?,
+            definitions: present(fields.remove("definitions"), "definitions", schema_map)?,
+            items: present(fields.remove("items"), "items", items)?,
+            prefix_items: present(fields.remove("prefixItems"), "prefixItems", schema_array)?,
+            additional_items: present(
+                fields.remove("additionalItems"),
+                "additionalItems",
+                boxed_schema,
+            )?,
+            unevaluated_items: present(
+                fields.remove("unevaluatedItems"),
+                "unevaluatedItems",
+                boxed_schema,
+            )?,
+            contains: present(fields.remove("contains"), "contains", boxed_schema)?,
+            extras: fields.into_iter().collect(),
+        })
     }
 
     fn legacy<T, E>(value: Option<Value>, key: &str) -> Result<Option<T>, E>
