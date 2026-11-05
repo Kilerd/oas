@@ -350,3 +350,224 @@ fn visit_children<T, E>(
     }
     Ok(())
 }
+
+/// Strict (default-feature) schema decoding.
+///
+/// The derived deserializer buffered the whole schema object into Serde's
+/// `Content` at every nesting level, because `Schema` flattens its extras and
+/// its child enums are untagged. A schema nested 100 levels deep therefore
+/// copied its leaf subtree once per level. Decoding the map once with
+/// `serde_json` and moving children out of it keeps the cost linear in the
+/// input size; no node is copied per nesting level.
+#[cfg(not(feature = "lossless-schema-keywords"))]
+mod strict {
+    use crate::{Schema, SchemaCount, SchemaDependency, SchemaItems, SchemaValue};
+    use serde::de::{self, DeserializeOwned};
+    use serde::{Deserialize, Deserializer};
+    use serde_json::{Map, Value};
+    use std::collections::BTreeMap;
+
+    impl<'de> Deserialize<'de> for Schema {
+        fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+        where
+            D: Deserializer<'de>,
+        {
+            decode(Map::<String, Value>::deserialize(deserializer)?)
+        }
+    }
+
+    fn decode<E>(mut fields: Map<String, Value>) -> Result<Schema, E>
+    where
+        E: de::Error,
+    {
+        // Legacy fields treat JSON null as absent, like serde's `Option<T>`;
+        // structural fields reject a present null or malformed value. `extras`
+        // is initialized last, after every declared keyword has been removed.
+        Ok(Schema {
+            _type: legacy(fields.remove("type"), "type")?,
+            _ref: legacy(fields.remove("$ref"), "$ref")?,
+            format: legacy(fields.remove("format"), "format")?,
+            nullable: legacy(fields.remove("nullable"), "nullable")?,
+            description: legacy(fields.remove("description"), "description")?,
+            content_media_type: legacy(fields.remove("contentMediaType"), "contentMediaType")?,
+            content_encoding: legacy(fields.remove("contentEncoding"), "contentEncoding")?,
+            content_schema: legacy(fields.remove("contentSchema"), "contentSchema")?,
+            properties: present(fields.remove("properties"), "properties", schema_map)?,
+            pattern_properties: present(
+                fields.remove("patternProperties"),
+                "patternProperties",
+                schema_map,
+            )?,
+            required: present(fields.remove("required"), "required", strings)?,
+            min_properties: present(fields.remove("minProperties"), "minProperties", count)?,
+            max_properties: present(fields.remove("maxProperties"), "maxProperties", count)?,
+            additional_properties: present(
+                fields.remove("additionalProperties"),
+                "additionalProperties",
+                boxed_schema,
+            )?,
+            unevaluated_properties: present(
+                fields.remove("unevaluatedProperties"),
+                "unevaluatedProperties",
+                boxed_schema,
+            )?,
+            property_names: present(
+                fields.remove("propertyNames"),
+                "propertyNames",
+                boxed_schema,
+            )?,
+            all_of: present(fields.remove("allOf"), "allOf", schema_array)?,
+            any_of: present(fields.remove("anyOf"), "anyOf", schema_array)?,
+            one_of: present(fields.remove("oneOf"), "oneOf", schema_array)?,
+            not: present(fields.remove("not"), "not", boxed_schema)?,
+            if_schema: present(fields.remove("if"), "if", boxed_schema)?,
+            then_schema: present(fields.remove("then"), "then", boxed_schema)?,
+            else_schema: present(fields.remove("else"), "else", boxed_schema)?,
+            dependent_required: present(
+                fields.remove("dependentRequired"),
+                "dependentRequired",
+                string_map,
+            )?,
+            dependent_schemas: present(
+                fields.remove("dependentSchemas"),
+                "dependentSchemas",
+                schema_map,
+            )?,
+            dependencies: present(fields.remove("dependencies"), "dependencies", dependencies)?,
+            defs: present(fields.remove("$defs"), "$defs", schema_map)?,
+            definitions: present(fields.remove("definitions"), "definitions", schema_map)?,
+            items: present(fields.remove("items"), "items", items)?,
+            prefix_items: present(fields.remove("prefixItems"), "prefixItems", schema_array)?,
+            additional_items: present(
+                fields.remove("additionalItems"),
+                "additionalItems",
+                boxed_schema,
+            )?,
+            unevaluated_items: present(
+                fields.remove("unevaluatedItems"),
+                "unevaluatedItems",
+                boxed_schema,
+            )?,
+            contains: present(fields.remove("contains"), "contains", boxed_schema)?,
+            extras: fields.into_iter().collect(),
+        })
+    }
+
+    fn legacy<T, E>(value: Option<Value>, key: &str) -> Result<Option<T>, E>
+    where
+        T: DeserializeOwned,
+        E: de::Error,
+    {
+        match value {
+            None | Some(Value::Null) => Ok(None),
+            Some(value) => T::deserialize(value)
+                .map(Some)
+                .map_err(|_| E::custom(format!("invalid schema keyword {key}"))),
+        }
+    }
+
+    fn present<T, E>(
+        value: Option<Value>,
+        key: &str,
+        parse: impl FnOnce(Value) -> Result<T, E>,
+    ) -> Result<Option<T>, E>
+    where
+        E: de::Error,
+    {
+        match value {
+            None => Ok(None),
+            Some(value) => parse(value)
+                .map(Some)
+                .map_err(|_| E::custom(format!("invalid schema keyword {key}"))),
+        }
+    }
+
+    fn schema_value<E: de::Error>(value: Value) -> Result<SchemaValue, E> {
+        match value {
+            Value::Bool(value) => Ok(SchemaValue::Boolean(value)),
+            Value::Object(fields) => {
+                decode(fields).map(|schema| SchemaValue::Object(Box::new(schema)))
+            }
+            _ => Err(E::custom("expected a schema object or boolean")),
+        }
+    }
+
+    fn boxed_schema<E: de::Error>(value: Value) -> Result<Box<SchemaValue>, E> {
+        schema_value(value).map(Box::new)
+    }
+
+    fn schema_map<E: de::Error>(value: Value) -> Result<BTreeMap<String, SchemaValue>, E> {
+        match value {
+            Value::Object(fields) => fields
+                .into_iter()
+                .map(|(key, value)| Ok((key, schema_value(value)?)))
+                .collect(),
+            _ => Err(E::custom("expected an object of schemas")),
+        }
+    }
+
+    fn schema_array<E: de::Error>(value: Value) -> Result<Vec<SchemaValue>, E> {
+        match value {
+            Value::Array(values) => values.into_iter().map(schema_value).collect(),
+            _ => Err(E::custom("expected an array of schemas")),
+        }
+    }
+
+    fn strings<E: de::Error>(value: Value) -> Result<Vec<String>, E> {
+        match value {
+            Value::Array(values) => values
+                .into_iter()
+                .map(|value| match value {
+                    Value::String(value) => Ok(value),
+                    _ => Err(E::custom("expected an array of strings")),
+                })
+                .collect(),
+            _ => Err(E::custom("expected an array of strings")),
+        }
+    }
+
+    fn string_map<E: de::Error>(value: Value) -> Result<BTreeMap<String, Vec<String>>, E> {
+        match value {
+            Value::Object(fields) => fields
+                .into_iter()
+                .map(|(key, value)| Ok((key, strings(value)?)))
+                .collect(),
+            _ => Err(E::custom("expected an object of string arrays")),
+        }
+    }
+
+    fn count<E: de::Error>(value: Value) -> Result<SchemaCount, E> {
+        SchemaCount::deserialize(value)
+            .map_err(|_| E::custom("expected a nonnegative integer count"))
+    }
+
+    fn items<E: de::Error>(value: Value) -> Result<SchemaItems, E> {
+        match value {
+            Value::Array(values) => Ok(SchemaItems::Tuple(
+                values
+                    .into_iter()
+                    .map(schema_value)
+                    .collect::<Result<_, E>>()?,
+            )),
+            value => Ok(SchemaItems::Schema(Box::new(schema_value(value)?))),
+        }
+    }
+
+    fn dependencies<E: de::Error>(value: Value) -> Result<BTreeMap<String, SchemaDependency>, E> {
+        match value {
+            Value::Object(fields) => fields
+                .into_iter()
+                .map(|(key, value)| {
+                    let dependency = match value {
+                        Value::Array(values) => {
+                            SchemaDependency::Required(strings(Value::Array(values))?)
+                        }
+                        value => SchemaDependency::Schema(Box::new(schema_value(value)?)),
+                    };
+                    Ok((key, dependency))
+                })
+                .collect(),
+            _ => Err(E::custom("expected an object of dependencies")),
+        }
+    }
+}

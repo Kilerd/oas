@@ -47,23 +47,101 @@ impl<'de, T: Deserialize<'de>> Deserialize<'de> for Referenceable<T> {
     where
         D: serde::Deserializer<'de>,
     {
+        if keeps_schema_reference_siblings::<T>() {
+            // JSON Schema 2020-12 makes `$ref` an ordinary keyword with
+            // sibling keywords, so a schema position keeps its schema-first
+            // rule. A strict Reference Object still selects `Reference`, and
+            // malformed inline siblings fall back to reference extras.
+            #[derive(Deserialize)]
+            #[serde(untagged)]
+            enum Candidate<T> {
+                Reference(#[serde(deserialize_with = "deserialize_reference_object")] Reference),
+                Data(T),
+                ReferenceWithAdditionalProperties(Reference),
+            }
+
+            return Ok(match Candidate::deserialize(deserializer)? {
+                Candidate::Reference(reference)
+                | Candidate::ReferenceWithAdditionalProperties(reference) => {
+                    Self::Reference(reference)
+                }
+                Candidate::Data(data) => Self::Data(data),
+            });
+        }
+
+        // OpenAPI 3.1 §4.8.23: an object whose `$ref` is a string is a
+        // Reference Object. Other properties are ignored semantically; the
+        // strict model retains them in `Reference::extras` for editing.
         #[derive(Deserialize)]
         #[serde(untagged)]
         enum Candidate<T> {
-            Reference(#[serde(deserialize_with = "deserialize_reference_object")] Reference),
+            Reference(ReferenceFirst),
             Data(T),
-            // Accept additional Reference Object properties only after giving
-            // schema siblings and generic inline payloads a chance to parse.
-            ReferenceWithAdditionalProperties(Reference),
         }
 
-        match Candidate::deserialize(deserializer)? {
-            Candidate::Reference(reference)
-            | Candidate::ReferenceWithAdditionalProperties(reference) => {
-                Ok(Self::Reference(reference))
+        Ok(match Candidate::deserialize(deserializer)? {
+            Candidate::Reference(ReferenceFirst(reference)) => Self::Reference(reference),
+            Candidate::Data(data) => Self::Data(data),
+        })
+    }
+}
+
+/// JSON Schema 2020-12 gives `$ref` sibling keywords meaning, so the legacy
+/// `Referenceable<Schema>` target keeps the schema-first rule. Every other
+/// target follows OpenAPI's Reference Object rule.
+fn keeps_schema_reference_siblings<T>() -> bool {
+    std::any::type_name::<T>() == std::any::type_name::<Schema>()
+}
+
+/// First untagged candidate: a map with a string `$ref` is a Reference
+/// Object, even when it also carries properties an inline object would accept.
+struct ReferenceFirst(Reference);
+
+impl<'de> Deserialize<'de> for ReferenceFirst {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        struct ReferenceVisitor;
+
+        impl<'de> serde::de::Visitor<'de> for ReferenceVisitor {
+            type Value = ReferenceFirst;
+
+            fn expecting(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                formatter.write_str("a Reference Object")
             }
-            Candidate::Data(data) => Ok(Self::Data(data)),
+
+            fn visit_map<A>(self, mut map: A) -> Result<Self::Value, A::Error>
+            where
+                A: serde::de::MapAccess<'de>,
+            {
+                let mut reference = None;
+                let mut summary = None;
+                let mut description = None;
+                let mut extras = BTreeMap::new();
+                while let Some(key) = map.next_key::<String>()? {
+                    match key.as_str() {
+                        "$ref" => reference = Some(map.next_value::<String>()?),
+                        "summary" => summary = map.next_value::<Option<String>>()?,
+                        "description" => description = map.next_value::<Option<String>>()?,
+                        _ => {
+                            extras.insert(key, map.next_value::<Any>()?);
+                        }
+                    }
+                }
+                match reference {
+                    Some(reference) => Ok(ReferenceFirst(Reference {
+                        _ref: reference,
+                        summary,
+                        description,
+                        extras,
+                    })),
+                    None => Err(serde::de::Error::custom("expected a Reference Object")),
+                }
+            }
         }
+
+        deserializer.deserialize_any(ReferenceVisitor)
     }
 }
 
@@ -368,6 +446,10 @@ pub struct Components {
 }
 
 /// Describes the operations available on a single path.
+///
+/// Operations are boxed so an empty path item costs eight pointers instead of
+/// eight inline operation objects; a document of empty path items otherwise
+/// amplifies its JSON size by hundreds of times.
 #[skip_serializing_none]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PathItem {
@@ -379,21 +461,21 @@ pub struct PathItem {
     /// An optional, string description, intended to apply to all operations in this path.
     pub description: Option<String>,
     /// A definition of a GET operation on this path.
-    pub get: Option<Operation>,
+    pub get: Option<Box<Operation>>,
     /// A definition of a PUT operation on this path.
-    pub put: Option<Operation>,
+    pub put: Option<Box<Operation>>,
     /// A definition of a POST operation on this path.
-    pub post: Option<Operation>,
+    pub post: Option<Box<Operation>>,
     /// A definition of a DELETE operation on this path.
-    pub delete: Option<Operation>,
+    pub delete: Option<Box<Operation>>,
     /// A definition of a OPTIONS operation on this path.
-    pub options: Option<Operation>,
+    pub options: Option<Box<Operation>>,
     /// A definition of a HEAD operation on this path.
-    pub head: Option<Operation>,
+    pub head: Option<Box<Operation>>,
     /// A definition of a PATCH operation on this path.
-    pub patch: Option<Operation>,
+    pub patch: Option<Box<Operation>>,
     /// A definition of a TRACE operation on this path.
-    pub trace: Option<Operation>,
+    pub trace: Option<Box<Operation>>,
     /// An alternative `server` array to service all operations in this path.
     pub servers: Option<Vec<Server>>,
     /// A list of parameters that are applicable for all the operations described under this path.
@@ -813,15 +895,52 @@ impl From<Vec<String>> for SchemaType {
 /// let referenced = Schema::reference("#/components/schemas/Event")
 ///     .with_description("A parsed event");
 /// ```
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize)]
 #[serde(untagged)]
 pub enum SchemaValue {
     Boolean(bool),
     Object(Box<Schema>),
     /// A malformed structural child retained by lossless decoding.
     #[cfg(feature = "lossless-schema-keywords")]
-    #[serde(skip_deserializing)]
     Invalid(Any),
+}
+
+impl<'de> Deserialize<'de> for SchemaValue {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        struct SchemaVisitor;
+
+        impl<'de> serde::de::Visitor<'de> for SchemaVisitor {
+            type Value = SchemaValue;
+
+            fn expecting(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                formatter.write_str("a schema object or boolean")
+            }
+
+            fn visit_bool<E>(self, value: bool) -> Result<Self::Value, E>
+            where
+                E: serde::de::Error,
+            {
+                Ok(SchemaValue::Boolean(value))
+            }
+
+            fn visit_map<A>(self, map: A) -> Result<Self::Value, A::Error>
+            where
+                A: serde::de::MapAccess<'de>,
+            {
+                // A schema object is decoded once from its map; the derived
+                // untagged enum used to buffer the whole subtree at every
+                // nesting level, which amplified deep schemas without bound.
+                let schema =
+                    Schema::deserialize(serde::de::value::MapAccessDeserializer::new(map))?;
+                Ok(SchemaValue::Object(Box::new(schema)))
+            }
+        }
+
+        deserializer.deserialize_any(SchemaVisitor)
+    }
 }
 
 impl SchemaValue {
@@ -920,10 +1039,7 @@ impl From<Referenceable<Schema>> for SchemaValue {
 /// unification applies this mode to all consumers of the crate.
 #[cfg_attr(not(feature = "lossless-schema-keywords"), skip_serializing_none)]
 #[derive(Debug, Clone, Default)]
-#[cfg_attr(
-    not(feature = "lossless-schema-keywords"),
-    derive(Serialize, Deserialize)
-)]
+#[cfg_attr(not(feature = "lossless-schema-keywords"), derive(Serialize))]
 #[cfg_attr(
     not(feature = "lossless-schema-keywords"),
     serde(rename_all = "camelCase")
