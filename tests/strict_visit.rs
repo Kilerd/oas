@@ -2,7 +2,8 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::time::{Duration, Instant};
 
 use oas::visit::{
-    ComponentKind, ComponentRef, ComponentValue, DirectRef, RefError, RefSite, Visit, VisitMut,
+    ComponentKind, ComponentRef, ComponentValue, DirectRef, ExtrasOwner, RefError, RefSite, Visit,
+    VisitMut,
 };
 use oas::OpenAPIV3;
 use serde_json::{json, Value};
@@ -27,7 +28,7 @@ fn references(doc: &OpenAPIV3) -> Vec<(ComponentKind, String, bool)> {
 struct Extensions(BTreeSet<String>);
 
 impl Visit for Extensions {
-    fn extensions(&mut self, extras: &BTreeMap<String, serde_json::Value>) {
+    fn extensions(&mut self, _owner: ExtrasOwner, extras: &BTreeMap<String, serde_json::Value>) {
         self.0.extend(extras.keys().cloned());
     }
 }
@@ -1394,4 +1395,72 @@ fn paths_can_be_built_from_a_map_or_an_iterator() {
         .collect();
     assert!(from_iter.contains_key("/b"));
     assert!(from_iter.extras.is_empty());
+}
+
+#[test]
+fn extensions_report_the_object_that_owns_them() {
+    #[derive(Default)]
+    struct Owners(Vec<(ExtrasOwner, String)>);
+    impl Visit for Owners {
+        fn extensions(&mut self, owner: ExtrasOwner, extras: &BTreeMap<String, serde_json::Value>) {
+            for key in extras.keys() {
+                self.0.push((owner, key.clone()));
+            }
+        }
+    }
+
+    let doc: OpenAPIV3 = serde_json::from_value(json!({
+        "openapi": "3.1.0",
+        "info": {"title": "t", "version": "1", "x-info": true},
+        "paths": {
+            "x-paths": true,
+            "/x": {
+                "x-path-item": true,
+                "get": {
+                    "x-operation": true,
+                    "responses": {"200": {
+                        "$ref": "#/components/responses/Ok",
+                        "x-reference": true
+                    }}
+                }
+            }
+        },
+        "components": {
+            "responses": {"Ok": {"description": "ok"}},
+            "schemas": {"A": {
+                "x-schema": true,
+                "items": {"x-nested-schema": true},
+                "xml": {"name": "A", "x-xml": true},
+                "discriminator": {"propertyName": "kind", "x-discriminator": true},
+                "externalDocs": {"url": "https://e.test", "x-external": true}
+            }}
+        }
+    }))
+    .unwrap();
+    let mut owners = Owners::default();
+    doc.walk(&mut owners);
+    for (owner, key) in [
+        (ExtrasOwner::Schema, "x-schema"),
+        (ExtrasOwner::Schema, "x-nested-schema"),
+        (ExtrasOwner::Object, "x-info"),
+        (ExtrasOwner::Object, "x-paths"),
+        (ExtrasOwner::Object, "x-path-item"),
+        (ExtrasOwner::Object, "x-operation"),
+        (ExtrasOwner::Object, "x-reference"),
+        (ExtrasOwner::Object, "x-xml"),
+        (ExtrasOwner::Object, "x-discriminator"),
+        (ExtrasOwner::Object, "x-external"),
+    ] {
+        assert!(
+            owners.0.contains(&(owner, key.to_string())),
+            "{key} must be reported as {owner:?}: {:?}",
+            owners.0
+        );
+    }
+    assert!(
+        !owners
+            .0
+            .contains(&(ExtrasOwner::Object, "x-schema".to_string())),
+        "a schema's own keywords are not object extensions"
+    );
 }

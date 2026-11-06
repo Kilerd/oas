@@ -39,6 +39,16 @@ because `Box` is transparent to Serde.
   Borrowed field access still dereferences automatically, so
   `path.get.as_ref().unwrap().summary` continues to compile.
 
+## Unreleased: visitor extension owners
+
+`Visit::extensions` and `VisitMut::extensions` take an `ExtrasOwner` first
+argument. `ExtrasOwner::Schema` marks a Schema Object's own unmodeled keywords,
+where `example`, `examples`, `default`, `enum` and `const` hold literal data;
+`ExtrasOwner::Object` marks every other OpenAPI object, where only `x-*` keys
+are extensions. The `xml`, `discriminator` and `externalDocs` objects nested in
+a schema are OpenAPI sub-objects, so their maps use `Object`. The visitor API is
+unreleased; the change only affects code written against this branch.
+
 ## Unreleased: Paths, webhooks and callback keys
 
 `OpenAPIV3.paths` is now a `Paths` object, and `OpenAPIV3` has a

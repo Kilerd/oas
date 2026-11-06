@@ -158,6 +158,12 @@ happens to name. `$dynamicRef` and `$recursiveRef` with a string value are repor
 with `RefSite::dynamic` set. Literal data (`example`, `examples` values, `default`,
 `enum`, `const`, extension values) is never visited.
 
+`extensions` receives an `ExtrasOwner`: `Schema` for a Schema Object's own
+unmodeled keywords, where `example`, `examples`, `default`, `enum` and `const`
+hold literal data, and `Object` for every other OpenAPI object, where only
+`x-*` keys are extensions. The `xml`, `discriminator` and `externalDocs` value
+objects nested in a schema are OpenAPI sub-objects, so their maps use `Object`.
+
 `OpenAPIV3::ref_graph` (or `Components::ref_graph`) builds a component-to-component
 graph once. `RefGraph::closure` follows it to a fixpoint, `RefGraph::dependents`
 walks it backwards, and `RefGraph::roots` resolves the references an `Operation`
