@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- `OpenAPIV3.webhooks` models root-level OpenAPI 3.1 webhooks; `walk`, `walk_mut` and `rename_refs` traverse them like Path Items.
 - `oas::visit`: `Visit` and `VisitMut` traversal of the strict model, `ComponentKind` / `ComponentRef` / `RefError`, `RefGraph` closure, dependents and broken-component analysis, `Operation::refs`, `rename_refs` on documents, operations, path items and components, and `Components::copy_from`.
 
 ### Changed

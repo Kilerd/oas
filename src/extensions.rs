@@ -33,6 +33,7 @@ impl OpenAPIV3 {
             info,
             servers: None,
             paths: Paths::default(),
+            webhooks: None,
             components: None,
             security: None,
             tags: None,

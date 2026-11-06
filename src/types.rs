@@ -394,6 +394,12 @@ pub struct OpenAPIV3 {
     /// Keys starting with `x-` are Paths extensions.
     pub paths: Paths,
 
+    /// Incoming webhooks described by Path Item objects, keyed by name.
+    ///
+    /// OpenAPI 3.1 and later place webhooks at the document root; they are not
+    /// part of `paths` and are not served by a route table.
+    pub webhooks: Option<BTreeMap<String, PathItem>>,
+
     /// An element to hold various schemas for the specification.
     ///
     /// All objects defined within the components object will have no effect on the API

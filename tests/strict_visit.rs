@@ -704,3 +704,43 @@ fn paths_extensions_are_not_path_items() {
         .any(|(kind, target, _)| *kind == ComponentKind::Responses
             && target == "#/components/responses/R"));
 }
+
+#[test]
+fn webhooks_are_typed_and_walked() {
+    let mut doc: OpenAPIV3 = serde_json::from_value(json!({
+        "openapi": "3.1.0",
+        "info": {"title": "t", "version": "1"},
+        "paths": {},
+        "webhooks": {"newEvent": {"post": {
+            "responses": {"200": {"$ref": "#/components/responses/Ok"}}
+        }}},
+        "components": {"responses": {"Ok": {"description": "ok"}}}
+    }))
+    .unwrap();
+    assert!(
+        doc.extras
+            .as_ref()
+            .map_or(true, |extras| !extras.contains_key("webhooks")),
+        "webhooks must not stay in the root extension map"
+    );
+    assert_eq!(doc.webhooks.as_ref().unwrap().len(), 1);
+    let found = references(&doc);
+    assert!(
+        found
+            .iter()
+            .any(|(kind, target, _)| *kind == ComponentKind::Responses
+                && target == "#/components/responses/Ok"),
+        "a reference inside a webhook must be walked: {found:?}"
+    );
+
+    doc.rename_refs(&BTreeMap::from([(
+        ComponentRef::new(ComponentKind::Responses, "Ok"),
+        "Success".to_string(),
+    )]));
+    let value = serde_json::to_value(&doc).unwrap();
+    assert_eq!(
+        value["webhooks"]["newEvent"]["post"]["responses"]["200"]["$ref"],
+        "#/components/responses/Success",
+        "rename_refs must rewrite references inside webhooks"
+    );
+}

@@ -97,6 +97,7 @@ macro_rules! walkers {
                     info,
                     servers,
                     paths,
+                    webhooks,
                     components,
                     security,
                     tags,
@@ -113,6 +114,11 @@ macro_rules! walkers {
                 visit.extensions(& $($mutability)? paths.extras);
                 for (_, item) in paths {
                     path_item(visit, item);
+                }
+                if let Some(webhooks) = webhooks {
+                    for (_, item) in webhooks {
+                        path_item(visit, item);
+                    }
                 }
                 if let Some(components) = components {
                     components_node(visit, components);
