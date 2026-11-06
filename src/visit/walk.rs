@@ -437,7 +437,6 @@ macro_rules! walkers {
                     visit.reference(crate::visit::$site {
                         kind: ComponentKind::PathItems,
                         target,
-                        extras: Some(extras),
                         dynamic: false,
                         mapping: false,
                     });
@@ -690,7 +689,6 @@ macro_rules! walkers {
                     visit.reference(crate::visit::$site {
                         kind: ComponentKind::Callbacks,
                         target,
-                        extras: Some(extras),
                         dynamic: false,
                         mapping: false,
                     });
@@ -733,7 +731,6 @@ macro_rules! walkers {
                         visit.reference(crate::visit::$site {
                             kind: ComponentKind::PathItems,
                             target,
-                            extras: None,
                             dynamic: false,
                             mapping: false,
                         });
@@ -883,7 +880,6 @@ macro_rules! walkers {
                         visit.reference(crate::visit::$site {
                             kind,
                             target: _ref,
-                            extras: Some(extras),
                             dynamic: false,
                             mapping: false,
                         });
@@ -919,7 +915,6 @@ macro_rules! walkers {
                     visit.reference(crate::visit::$site {
                         kind: ComponentKind::Schemas,
                         target,
-                        extras: Some(& $($mutability)? schema.extras),
                         dynamic: false,
                         mapping: false,
                     });
@@ -929,7 +924,6 @@ macro_rules! walkers {
                         visit.reference(crate::visit::$site {
                             kind: ComponentKind::Schemas,
                             target,
-                            extras: None,
                             dynamic: true,
                             mapping: false,
                         });
@@ -962,7 +956,6 @@ macro_rules! walkers {
                                     visit.reference(crate::visit::$site {
                                         kind: ComponentKind::Schemas,
                                         target,
-                                        extras: None,
                                         dynamic: false,
                                         mapping: true,
                                     });
@@ -984,7 +977,6 @@ macro_rules! walkers {
                             visit.reference(crate::visit::$site {
                                 kind: ComponentKind::Schemas,
                                 target,
-                                extras: None,
                                 dynamic: false,
                                 mapping: true,
                             });

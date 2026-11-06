@@ -633,7 +633,7 @@ fn component_value_kinds_and_pointers_are_stable() {
     );
     assert_eq!(
         ComponentRef::parse("$dynamicRef").unwrap_err(),
-        RefError::Dynamic
+        RefError::External
     );
     let value: Value = json!({"type": "string"});
     let components: oas::Components =
@@ -1148,5 +1148,40 @@ fn propagated_broken_errors_are_deterministic() {
     assert_eq!(
         graph.broken()[&key("Z")],
         RefError::Missing(key("MissingZ"))
+    );
+}
+
+#[test]
+fn component_kinds_are_a_complete_slice() {
+    assert_eq!(ComponentKind::ALL.len(), 10);
+    for kind in ComponentKind::ALL {
+        assert_eq!(ComponentKind::from_key(kind.key()), Some(*kind));
+    }
+}
+
+#[test]
+fn graph_edges_are_deduplicated() {
+    let doc: OpenAPIV3 = serde_json::from_value(json!({
+        "openapi": "3.1.0",
+        "info": {"title": "t", "version": "1"},
+        "paths": {},
+        "components": {"schemas": {
+            "A": {"type": "string"},
+            "P": {"allOf": [
+                {"$ref": "#/components/schemas/A"},
+                {"$ref": "#/components/schemas/A"}
+            ]}
+        }}
+    }))
+    .unwrap();
+    let key = |name: &str| ComponentRef::new(ComponentKind::Schemas, name);
+    let graph = doc.ref_graph();
+    assert_eq!(
+        graph.edges()[&key("P")]
+            .iter()
+            .filter(|child| **child == key("A"))
+            .count(),
+        1,
+        "a component references another once even when several positions do"
     );
 }

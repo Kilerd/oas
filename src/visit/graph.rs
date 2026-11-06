@@ -133,6 +133,8 @@ impl Components {
                     }
                 }
             }
+            let mut seen = BTreeSet::new();
+            children.retain(|child| seen.insert(child.clone()));
             edges.insert(key, children);
         }
 
@@ -196,7 +198,7 @@ fn resolve(
 /// Every component name in `components`, in [`ComponentKind::ALL`] order.
 fn component_refs(components: &Components) -> Vec<ComponentRef> {
     let mut refs = Vec::new();
-    for kind in ComponentKind::ALL {
+    for &kind in ComponentKind::ALL {
         let names: Vec<String> = match kind {
             ComponentKind::Schemas => components
                 .schemas

@@ -125,6 +125,10 @@ use walk::{read, write};
 pub use graph::RefGraph;
 
 /// One of the ten component groups under `components`.
+///
+/// The enum is non-exhaustive so a later component group can be added without
+/// breaking a downstream match; use a wildcard arm.
+#[non_exhaustive]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum ComponentKind {
     Schemas,
@@ -141,7 +145,7 @@ pub enum ComponentKind {
 
 impl ComponentKind {
     /// Every component kind, in the order the specification lists them.
-    pub const ALL: [Self; 10] = [
+    pub const ALL: &'static [Self] = &[
         Self::Schemas,
         Self::Responses,
         Self::Parameters,
@@ -172,7 +176,7 @@ impl ComponentKind {
 
     /// The kind whose group key is `key`.
     pub fn from_key(key: &str) -> Option<Self> {
-        Self::ALL.into_iter().find(|kind| kind.key() == key)
+        Self::ALL.iter().copied().find(|kind| kind.key() == key)
     }
 }
 
@@ -200,9 +204,6 @@ impl ComponentRef {
     /// the component exists and has the expected kind) is done by [`RefGraph`]
     /// and [`Components::get`].
     pub fn parse(target: &str) -> Result<Self, RefError> {
-        if target.starts_with('$') {
-            return Err(RefError::Dynamic);
-        }
         let Some(pointer) = target.strip_prefix('#') else {
             return Err(RefError::External);
         };
@@ -234,6 +235,10 @@ impl fmt::Display for ComponentRef {
 }
 
 /// Why a reference does not name a component of the document.
+///
+/// The enum is non-exhaustive so a new failure mode can be added without
+/// breaking a downstream match; use a wildcard arm.
+#[non_exhaustive]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum RefError {
     /// A URL or a relative file reference, not a local pointer.
@@ -299,10 +304,6 @@ pub struct RefSite<'a> {
     pub kind: ComponentKind,
     /// The raw target as written in the document.
     pub target: &'a str,
-    /// The Reference Object's unmodeled fields, when the site is a Reference
-    /// Object. A schema `$ref` reports the schema's unmodeled fields; a
-    /// `discriminator.mapping` value and a dynamic reference report `None`.
-    pub extras: Option<&'a BTreeMap<String, Any>>,
     /// True for a `$dynamicRef` or `$recursiveRef` with a string value.
     pub dynamic: bool,
     /// True for a `discriminator.mapping` value. A bare value (no `#` and no
@@ -318,10 +319,6 @@ pub struct RefSiteMut<'a> {
     pub kind: ComponentKind,
     /// The target to rewrite.
     pub target: &'a mut String,
-    /// The Reference Object's unmodeled fields, when the site is a Reference
-    /// Object. A schema `$ref` reports the schema's unmodeled fields; a
-    /// `discriminator.mapping` value and a dynamic reference report `None`.
-    pub extras: Option<&'a mut BTreeMap<String, Any>>,
     /// True for a `$dynamicRef` or `$recursiveRef` with a string value.
     pub dynamic: bool,
     /// True for a `discriminator.mapping` value. A bare value (no `#` and no
