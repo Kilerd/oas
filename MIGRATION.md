@@ -39,6 +39,35 @@ because `Box` is transparent to Serde.
   Borrowed field access still dereferences automatically, so
   `path.get.as_ref().unwrap().summary` continues to compile.
 
+## Unreleased: Paths, webhooks and callback keys
+
+`OpenAPIV3.paths` is now a `Paths` object, and `OpenAPIV3` has a
+`webhooks: Option<BTreeMap<String, PathItem>>` field. Both are source breaking
+for complete struct literals; the JSON representation is unchanged, except that
+`x-*` keys under `paths` are extensions and no longer decode as Path Items.
+
+- `Paths` dereferences to `BTreeMap<String, PathItem>`, so indexing, `insert`,
+  `get`, `values` and `retain` keep working. `Paths::paths` is the map and
+  `Paths::extras` holds the `x-*` keys.
+- `From<BTreeMap<String, PathItem>>` and `FromIterator<(String, PathItem)>`
+  build a `Paths` with an empty extension map:
+
+  ```rust
+  use oas::{PathItem, Paths};
+  use std::collections::BTreeMap;
+
+  let paths: Paths = BTreeMap::from([("/users".to_string(), PathItem::new())]).into();
+  let paths: Paths = [("/users".to_string(), PathItem::new())].into_iter().collect();
+  ```
+
+- Complete `OpenAPIV3` literals add `webhooks: None`, and use
+  `paths: Paths::new()` when empty.
+
+Callback decoding treats every non-`x-*` object key other than `$ref`,
+`summary` and `description` as a callback expression, including a constant URL
+without braces. Non-object values stay in the callback's `extras` and are not
+walked, so one malformed entry does not reject the document.
+
 ## 0.4.0-dev: Tag builder change
 
 `Tag::with_description` now consumes an existing tag, matching the other
@@ -495,7 +524,7 @@ lossless round trip outside the supported subset.
 
 | Area | Remaining work |
 | --- | --- |
-| 3.1 document structure | Optional `paths`, typed `webhooks` and `jsonSchemaDialect`. Root `extras` retains unknown fields, but `paths` is still required. |
+| 3.1 document structure | Optional `paths` and `jsonSchemaDialect`. Root `extras` retains unknown fields, but `paths` is still required. |
 | 3.1 metadata | `Info.summary`, `License.identifier`. |
 | 3.1 security | `mutualTLS`; flow-specific URL requirements are not validated. |
 | 3.1 operations/links | Optional operation `responses`; Link operation-field mutual exclusion is not validated. |

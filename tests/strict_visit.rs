@@ -1383,3 +1383,15 @@ fn security_requirements_survive_unrelated_renames_unchanged() {
         "a renamed requirement keeps its scopes as written when there is no collision"
     );
 }
+
+#[test]
+fn paths_can_be_built_from_a_map_or_an_iterator() {
+    let from_map: oas::Paths = BTreeMap::from([("/a".to_string(), oas::PathItem::new())]).into();
+    assert!(from_map.contains_key("/a"));
+    assert!(from_map.extras.is_empty());
+    let from_iter: oas::Paths = [("/b".to_string(), oas::PathItem::new())]
+        .into_iter()
+        .collect();
+    assert!(from_iter.contains_key("/b"));
+    assert!(from_iter.extras.is_empty());
+}

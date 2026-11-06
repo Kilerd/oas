@@ -9,14 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 - `PathItem::operations` and `operations_mut` iterate present operations in specification method order; `Responses::iter` and `iter_mut` yield the default entry and status codes; `ParameterIn` implements `Copy`, `Ord` and `as_str`.
-- `OpenAPIV3.webhooks` models root-level OpenAPI 3.1 webhooks; `walk`, `walk_mut` and `rename_refs` traverse them like Path Items.
+- `OpenAPIV3.webhooks` models root-level OpenAPI 3.1 webhooks; `walk`, `walk_mut` and `rename_refs` traverse them like Path Items. This is breaking for complete `OpenAPIV3` struct literals: add `webhooks: None`.
 - `oas::visit`: `Visit` and `VisitMut` traversal of the strict model, `ComponentKind` / `ComponentRef` / `RefError`, `RefGraph` closure, dependents and broken-component analysis, `Operation::refs`, `rename_refs` on documents, operations, path items and components, and `Components::copy_from`.
 
 ### Changed
 - `ComponentKind` and `RefError` are `#[non_exhaustive]`; `ComponentKind::ALL` is a `&'static [Self]`. `RefSite` and `RefSiteMut` no longer carry a reference's extras: they reach `extensions` first. `ComponentRef::parse` reports a target that does not start with `#` as `External`, including one starting with `$`.
 - The OpenAPI 3.2 positions `PathItem.query`, `PathItem.additionalOperations`, `MediaType.itemEncoding`, `MediaType.prefixEncoding` and `components.mediaTypes` are documented as not walked: they stay in `extras` and are visible through `visit::Visit::extensions`.
-- `OpenAPIV3.paths` is a `Paths` object with its own `extras`; it dereferences to the path map, so indexing and map methods keep working. `x-*` keys under `paths` are extensions and no longer decode as Path Items.
+- `OpenAPIV3.paths` is a `Paths` object with its own `extras`; it dereferences to the path map, so indexing and map methods keep working, and `From<BTreeMap<String, PathItem>>` / `FromIterator<(String, PathItem)>` build one. This is breaking for complete `OpenAPIV3` struct literals. `x-*` keys under `paths` are extensions and no longer decode as Path Items.
 - `PathItem` stores each operation as `Option<Box<Operation>>`, so an empty path item no longer carries eight inline `Operation` objects. A document of empty path items used to amplify its JSON size by hundreds of times. The JSON representation is unchanged; Rust struct literals and direct field assignments now need `Box::new`.
+- Callback decoding treats every non-`x-*` object key other than `$ref`, `summary` and `description` as an expression, including a constant URL without braces. Non-object values stay in the callback's `extras` and are not walked.
 - `Referenceable<T>` deserializes any object whose `$ref` is a string as `Reference`, following OpenAPI 3.1 §4.8.23. Inline data that legitimately contains a string `$ref` member must be constructed with `Referenceable::data`. JSON Schema `$ref` siblings in `SchemaValue` and `Referenceable<Schema>` remain schema keywords.
 
 ### Fixed

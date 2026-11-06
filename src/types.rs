@@ -274,6 +274,24 @@ impl Paths {
     }
 }
 
+impl From<BTreeMap<String, PathItem>> for Paths {
+    fn from(paths: BTreeMap<String, PathItem>) -> Self {
+        Self {
+            paths,
+            extras: BTreeMap::new(),
+        }
+    }
+}
+
+impl FromIterator<(String, PathItem)> for Paths {
+    fn from_iter<I: IntoIterator<Item = (String, PathItem)>>(iter: I) -> Self {
+        Self {
+            paths: iter.into_iter().collect(),
+            extras: BTreeMap::new(),
+        }
+    }
+}
+
 impl std::ops::Deref for Paths {
     type Target = BTreeMap<String, PathItem>;
 
