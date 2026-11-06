@@ -719,7 +719,7 @@ macro_rules! walkers {
                 link: & $($mutability)? Link,
             ) {
                 let Link {
-                    operation_ref: _,
+                    operation_ref,
                     operation_id: _,
                     parameters: _,
                     request_body: _,
@@ -728,6 +728,17 @@ macro_rules! walkers {
                     extras,
                 } = link;
                 visit.extensions(extras);
+                if let Some(target) = operation_ref {
+                    if target.starts_with("#/components/pathItems/") {
+                        visit.reference(crate::visit::$site {
+                            kind: ComponentKind::PathItems,
+                            target,
+                            extras: None,
+                            dynamic: false,
+                            mapping: false,
+                        });
+                    }
+                }
                 if let Some(server) = server {
                     server_node(visit, server);
                 }

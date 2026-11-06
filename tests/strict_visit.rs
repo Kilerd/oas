@@ -920,3 +920,47 @@ fn rename_refs_keeps_the_tail_of_a_deeper_pointer() {
         "a deeper pointer must keep its tail after the component name changes"
     );
 }
+
+#[test]
+fn link_operation_refs_under_path_items_are_reported_and_renamed() {
+    let mut doc: OpenAPIV3 = serde_json::from_value(json!({
+        "openapi": "3.1.0",
+        "info": {"title": "t", "version": "1"},
+        "paths": {},
+        "components": {
+            "links": {
+                "L": {"operationRef": "#/components/pathItems/PI/get"},
+                "External": {"operationRef": "other.json#/paths/~1x/get"}
+            },
+            "pathItems": {"PI": {"get": {"responses": {"200": {"description": "ok"}}}}}
+        }
+    }))
+    .unwrap();
+    let found = references(&doc);
+    assert!(
+        found
+            .iter()
+            .any(|(kind, target, _)| *kind == ComponentKind::PathItems
+                && target == "#/components/pathItems/PI/get"),
+        "an operationRef under pathItems is a PathItems site: {found:?}"
+    );
+    assert!(
+        !found
+            .iter()
+            .any(|(_, target, _)| target == "other.json#/paths/~1x/get"),
+        "an external operationRef is not followed"
+    );
+    doc.rename_refs(&BTreeMap::from([(
+        ComponentRef::new(ComponentKind::PathItems, "PI"),
+        "Public".to_string(),
+    )]));
+    let value = serde_json::to_value(&doc).unwrap();
+    assert_eq!(
+        value["components"]["links"]["L"]["operationRef"], "#/components/pathItems/Public/get",
+        "rename keeps the operationRef tail"
+    );
+    assert_eq!(
+        value["components"]["links"]["External"]["operationRef"],
+        "other.json#/paths/~1x/get"
+    );
+}

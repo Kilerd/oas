@@ -13,6 +13,10 @@
 //! string is reported with [`RefSite::dynamic`] set; [`RefGraph`] resolves any
 //! such site to [`RefError::Dynamic`] instead of following it.
 //!
+//! `Link.operationRef` is reported as a `pathItems` reference when it points
+//! under `#/components/pathItems/`; a relative or external operation reference
+//! is not followed. `Link.parameters` and `Link.requestBody` are data.
+//!
 //! Every node is destructured completely in the walkers. Adding a field to a
 //! strict model type fails to compile in this module until the walk decides
 //! whether the field holds references or schemas.
