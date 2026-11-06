@@ -99,8 +99,9 @@ use crate::json_pointer;
 use crate::{Any, Components, OpenAPIV3, Operation, PathItem, Schema};
 
 mod graph;
-mod read;
-mod write;
+mod walk;
+
+use walk::{read, write};
 
 pub use graph::RefGraph;
 
