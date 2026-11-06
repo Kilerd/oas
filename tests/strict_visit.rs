@@ -669,3 +669,38 @@ fn path_item_and_component_entry_points_walk_their_subtrees() {
         .any(|(kind, target, _)| *kind == ComponentKind::Responses
             && target == "#/components/responses/Ok"));
 }
+
+#[test]
+fn paths_extensions_are_not_path_items() {
+    let doc: OpenAPIV3 = serde_json::from_value(json!({
+        "openapi": "3.1.0",
+        "info": {"title": "t", "version": "1"},
+        "paths": {
+            "x-flag": true,
+            "x-meta": {"$ref": "#/components/schemas/S"},
+            "/x": {"get": {"responses": {"200": {"$ref": "#/components/responses/R"}}}}
+        },
+        "components": {"responses": {"R": {"description": "ok"}}}
+    }))
+    .expect("Paths extensions must not decode as path items");
+    assert_eq!(doc.paths.extras["x-flag"], json!(true));
+    assert_eq!(
+        doc.paths.extras["x-meta"],
+        json!({"$ref": "#/components/schemas/S"})
+    );
+    let mut extensions = Extensions::default();
+    doc.walk(&mut extensions);
+    assert!(extensions.0.contains("x-flag"));
+    assert!(extensions.0.contains("x-meta"));
+    let found = references(&doc);
+    assert!(
+        !found
+            .iter()
+            .any(|(_, target, _)| target == "#/components/schemas/S"),
+        "a Paths extension value is data, not a reference"
+    );
+    assert!(found
+        .iter()
+        .any(|(kind, target, _)| *kind == ComponentKind::Responses
+            && target == "#/components/responses/R"));
+}

@@ -110,7 +110,8 @@ macro_rules! walkers {
                 for server in servers.$iter().flatten() {
                     server_node(visit, server);
                 }
-                for item in paths.$values() {
+                visit.extensions(& $($mutability)? paths.extras);
+                for (_, item) in paths {
                     path_item(visit, item);
                 }
                 if let Some(components) = components {

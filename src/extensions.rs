@@ -32,7 +32,7 @@ impl OpenAPIV3 {
             openapi: "3.0.0".to_string(),
             info,
             servers: None,
-            paths: BTreeMap::new(),
+            paths: Paths::default(),
             components: None,
             security: None,
             tags: None,
@@ -47,7 +47,10 @@ impl OpenAPIV3 {
     }
 
     pub fn with_paths(mut self, paths: BTreeMap<String, PathItem>) -> Self {
-        self.paths = paths;
+        self.paths = Paths {
+            paths,
+            ..Paths::default()
+        };
         self
     }
 

@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `oas::visit`: `Visit` and `VisitMut` traversal of the strict model, `ComponentKind` / `ComponentRef` / `RefError`, `RefGraph` closure, dependents and broken-component analysis, `Operation::refs`, `rename_refs` on documents, operations, path items and components, and `Components::copy_from`.
 
 ### Changed
+- `OpenAPIV3.paths` is a `Paths` object with its own `extras`; it dereferences to the path map, so indexing and map methods keep working. `x-*` keys under `paths` are extensions and no longer decode as Path Items.
 - `PathItem` stores each operation as `Option<Box<Operation>>`, so an empty path item no longer carries eight inline `Operation` objects. A document of empty path items used to amplify its JSON size by hundreds of times. The JSON representation is unchanged; Rust struct literals and direct field assignments now need `Box::new`.
 - `Referenceable<T>` deserializes any object whose `$ref` is a string as `Reference`, following OpenAPI 3.1 §4.8.23. Inline data that legitimately contains a string `$ref` member must be constructed with `Referenceable::data`. JSON Schema `$ref` siblings in `SchemaValue` and `Referenceable<Schema>` remain schema keywords.
 
