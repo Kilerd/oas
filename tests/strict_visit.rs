@@ -1011,3 +1011,42 @@ fn copy_from_validates_before_inserting_and_rejects_different_collisions() {
         "a conflict inserts nothing and leaves the destination unchanged"
     );
 }
+
+#[test]
+fn constant_callback_urls_are_path_items() {
+    let doc: OpenAPIV3 = serde_json::from_value(json!({
+        "openapi": "3.1.0",
+        "info": {"title": "t", "version": "1"},
+        "paths": {"/x": {"get": {
+            "callbacks": {"cb": {
+                "https://example.test/hook": {"post": {
+                    "responses": {"200": {"$ref": "#/components/responses/Ok"}}
+                }}
+            }},
+            "responses": {"200": {"description": "ok"}}
+        }}},
+        "components": {"responses": {"Ok": {"description": "ok"}}}
+    }))
+    .unwrap();
+    let callback = doc.paths["/x"]
+        .get
+        .as_ref()
+        .unwrap()
+        .callbacks
+        .as_ref()
+        .unwrap()["cb"]
+        .as_data()
+        .expect("the callback is inline");
+    assert!(
+        callback.data.contains_key("https://example.test/hook"),
+        "a constant URL without braces is a callback expression"
+    );
+    let found = references(&doc);
+    assert!(
+        found
+            .iter()
+            .any(|(kind, target, _)| *kind == ComponentKind::Responses
+                && target == "#/components/responses/Ok"),
+        "references inside a constant-URL callback must be walked: {found:?}"
+    );
+}

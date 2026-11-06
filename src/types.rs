@@ -826,19 +826,27 @@ impl<'de> Deserialize<'de> for Callback {
             extras: BTreeMap::new(),
         };
         for (key, value) in fields {
-            #[cfg(feature = "lossless-schema-keywords")]
             if key == "$ref" {
-                callback.reference = crate::lossless_component::Field::from_value(value);
+                #[cfg(feature = "lossless-schema-keywords")]
+                {
+                    callback.reference = crate::lossless_component::Field::from_value(value);
+                }
+                #[cfg(not(feature = "lossless-schema-keywords"))]
+                {
+                    callback.extras.insert(key, value);
+                }
                 continue;
             }
-            // Extensions remain opaque even when their names contain braces.
-            if !key.starts_with("x-") && key.contains('{') {
+            // Reference Object annotations stay with the reference; every
+            // other non-extension key is a callback expression, including a
+            // constant URL without braces. Extensions remain opaque.
+            if matches!(key.as_str(), "summary" | "description") || key.starts_with("x-") {
+                callback.extras.insert(key, value);
+            } else {
                 callback.data.insert(
                     key,
                     serde_json::from_value(value).map_err(serde::de::Error::custom)?,
                 );
-            } else {
-                callback.extras.insert(key, value);
             }
         }
         Ok(callback)
