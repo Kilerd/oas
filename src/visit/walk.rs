@@ -346,6 +346,7 @@ macro_rules! walkers {
                         target,
                         dynamic: false,
                         mapping: false,
+                        operation_ref: false,
                     });
                 }
                 for op in [get, put, post, delete, options, head, patch, trace] {
@@ -618,6 +619,7 @@ macro_rules! walkers {
                         target,
                         dynamic: false,
                         mapping: false,
+                        operation_ref: false,
                     });
                 }
                 for (_, item) in data {
@@ -660,6 +662,7 @@ macro_rules! walkers {
                             target,
                             dynamic: false,
                             mapping: false,
+                            operation_ref: true,
                         });
                     }
                 }
@@ -813,6 +816,7 @@ macro_rules! walkers {
                             target: _ref,
                             dynamic: false,
                             mapping: false,
+                            operation_ref: false,
                         });
                     }
                     Referenceable::Data(data) => inline(data, visit),
@@ -848,6 +852,7 @@ macro_rules! walkers {
                         target,
                         dynamic: false,
                         mapping: false,
+                        operation_ref: false,
                     });
                 }
                 for key in ["$dynamicRef", "$recursiveRef"] {
@@ -857,6 +862,7 @@ macro_rules! walkers {
                             target,
                             dynamic: true,
                             mapping: false,
+                            operation_ref: false,
                         });
                     }
                 }
@@ -889,6 +895,7 @@ macro_rules! walkers {
                                         target,
                                         dynamic: false,
                                         mapping: true,
+                                        operation_ref: false,
                                     });
                                 }
                             }
@@ -910,6 +917,7 @@ macro_rules! walkers {
                                 target,
                                 dynamic: false,
                                 mapping: true,
+                                operation_ref: false,
                             });
                         }
                     }

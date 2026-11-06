@@ -1,7 +1,8 @@
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 
 use super::{
-    component_refs, is_bare_name, Collect, ComponentKind, ComponentRef, DirectRef, RefError,
+    component_refs, is_bare_name, split_component_pointer, Collect, ComponentKind, ComponentRef,
+    DirectRef, RefError,
 };
 use crate::Components;
 
@@ -180,7 +181,11 @@ fn resolve(
     if target.dynamic {
         return Err(RefError::Dynamic);
     }
-    let parsed = if target.mapping && is_bare_name(&target.target) {
+    let parsed = if target.operation_ref {
+        split_component_pointer(&target.target)
+            .map(|(component, _)| component)
+            .ok_or(RefError::OutsideComponents)?
+    } else if target.mapping && is_bare_name(&target.target) {
         ComponentRef::new(ComponentKind::Schemas, &target.target)
     } else {
         ComponentRef::parse(&target.target)?

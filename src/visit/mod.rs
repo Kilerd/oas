@@ -389,6 +389,8 @@ pub struct DirectRef {
     pub dynamic: bool,
     /// True for a `discriminator.mapping` value.
     pub mapping: bool,
+    /// True for `Link.operationRef`.
+    pub operation_ref: bool,
 }
 
 /// A read-only reference site.
@@ -404,6 +406,10 @@ pub struct RefSite<'a> {
     /// `/`) names `components.schemas`; the graph resolves it as such and a
     /// rename keeps it bare.
     pub mapping: bool,
+    /// True for `Link.operationRef`. The target points at an operation inside
+    /// a Path Item component, one level deeper than the component name; the
+    /// graph resolves its component prefix.
+    pub operation_ref: bool,
 }
 
 /// A mutable reference site.
@@ -419,6 +425,10 @@ pub struct RefSiteMut<'a> {
     /// `/`) names `components.schemas`; the graph resolves it as such and a
     /// rename keeps it bare.
     pub mapping: bool,
+    /// True for `Link.operationRef`. The target points at an operation inside
+    /// a Path Item component, one level deeper than the component name; the
+    /// graph resolves its component prefix.
+    pub operation_ref: bool,
 }
 
 /// Read-only visitor over the strict model. Every method does nothing by
@@ -717,7 +727,7 @@ impl Components {
 /// Split `#/components/{kind}/{name}[/tail...]` into the component and the
 /// raw tail after the name token. The name token is RFC 6901 decoded; the tail
 /// is returned as written, so a rename keeps a deeper pointer's suffix.
-fn split_component_pointer(target: &str) -> Option<(ComponentRef, Option<&str>)> {
+pub(crate) fn split_component_pointer(target: &str) -> Option<(ComponentRef, Option<&str>)> {
     let rest = target.strip_prefix("#/components/")?;
     let mut parts = rest.splitn(3, '/');
     let kind = ComponentKind::from_key(parts.next()?)?;
@@ -820,6 +830,7 @@ impl Visit for Collect {
             target: site.target.to_owned(),
             dynamic: site.dynamic,
             mapping: site.mapping,
+            operation_ref: site.operation_ref,
         });
     }
 
@@ -830,6 +841,7 @@ impl Visit for Collect {
                 target: ComponentRef::new(ComponentKind::SecuritySchemes, name).to_pointer(),
                 dynamic: false,
                 mapping: false,
+                operation_ref: false,
             });
         }
     }

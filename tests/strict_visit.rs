@@ -330,6 +330,7 @@ fn graph_closes_cycles_propagates_broken_and_reverses() {
                 target: "#/components/schemas/A".into(),
                 dynamic: false,
                 mapping: false,
+                operation_ref: false,
             }])
             .unwrap(),
         BTreeSet::from([key(ComponentKind::Schemas, "A")])
@@ -340,6 +341,7 @@ fn graph_closes_cycles_propagates_broken_and_reverses() {
             target: "#/components/schemas/A".into(),
             dynamic: false,
             mapping: false,
+            operation_ref: false,
         }]),
         Err(RefError::WrongKind {
             expected: ComponentKind::Responses,
@@ -352,6 +354,7 @@ fn graph_closes_cycles_propagates_broken_and_reverses() {
             target: "#/components/schemas/Nope".into(),
             dynamic: false,
             mapping: false,
+            operation_ref: false,
         }]),
         Err(RefError::Missing(key(ComponentKind::Schemas, "Nope")))
     );
@@ -361,6 +364,7 @@ fn graph_closes_cycles_propagates_broken_and_reverses() {
             target: "#meta".into(),
             dynamic: true,
             mapping: false,
+            operation_ref: false,
         }]),
         Err(RefError::Dynamic)
     );
@@ -391,12 +395,14 @@ fn operation_refs_are_the_roots_of_its_own_references() {
                 target: "#/components/parameters/P".into(),
                 dynamic: false,
                 mapping: false,
+                operation_ref: false,
             },
             DirectRef {
                 kind: ComponentKind::Responses,
                 target: "#/components/responses/Ok".into(),
                 dynamic: false,
                 mapping: false,
+                operation_ref: false,
             }
         ]
     );
@@ -813,6 +819,7 @@ fn operation_refs_and_graph_include_security_schemes() {
             target: "#/components/securitySchemes/K".into(),
             dynamic: false,
             mapping: false,
+            operation_ref: false,
         }],
         "an operation's security requirement keys are its roots"
     );
@@ -1268,4 +1275,47 @@ fn parameter_location_helpers_are_copy_ordered_and_spelled() {
     assert_eq!(ParameterIn::Header.as_str(), "header");
     assert_eq!(ParameterIn::Path.as_str(), "path");
     assert_eq!(ParameterIn::Cookie.as_str(), "cookie");
+}
+
+#[test]
+fn operation_ref_edges_resolve_to_the_path_item() {
+    let doc: OpenAPIV3 = serde_json::from_value(json!({
+        "openapi": "3.1.0",
+        "info": {"title": "t", "version": "1"},
+        "paths": {"/x": {"get": {
+            "responses": {
+                "200": {"description": "ok", "links": {
+                    "l": {"operationRef": "#/components/pathItems/P/get"}
+                }},
+                "201": {"$ref": "#/components/responses/R"}
+            }
+        }}},
+        "components": {
+            "pathItems": {"P": {"get": {"responses": {"200": {"description": "ok"}}}}},
+            "links": {"L": {"operationRef": "#/components/pathItems/P/get"}},
+            "responses": {"R": {"description": "ok", "links": {
+                "l": {"$ref": "#/components/links/L"}
+            }}}
+        }
+    }))
+    .unwrap();
+    let key = |kind, name: &str| ComponentRef::new(kind, name);
+    let graph = doc.ref_graph();
+    assert!(
+        graph.broken().is_empty(),
+        "an operationRef points at a path item operation, not outside the components: {:?}",
+        graph.broken()
+    );
+    assert!(
+        graph.edges()[&key(ComponentKind::Links, "L")]
+            .contains(&key(ComponentKind::PathItems, "P")),
+        "the operationRef edge goes to the Path Item component"
+    );
+    assert!(graph.edges()[&key(ComponentKind::Responses, "R")]
+        .contains(&key(ComponentKind::Links, "L")));
+
+    let operation = doc.paths["/x"].get.as_ref().unwrap();
+    let roots = graph.roots(operation.refs()).unwrap();
+    assert!(roots.contains(&key(ComponentKind::PathItems, "P")));
+    assert!(roots.contains(&key(ComponentKind::Responses, "R")));
 }
