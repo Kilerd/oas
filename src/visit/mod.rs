@@ -412,6 +412,9 @@ impl OpenAPIV3 {
 
     /// Rewrite every reference target through `renames`, and every security
     /// requirement key whose `securitySchemes` component is renamed.
+    ///
+    /// A pointer deeper than `#/components/{kind}/{name}` keeps its tail, so
+    /// `.../Foo/properties/bar` follows a rename of `Foo`.
     pub fn rename_refs(&mut self, renames: &BTreeMap<ComponentRef, String>) {
         self.walk_mut(&mut Rename { renames });
     }
@@ -629,6 +632,20 @@ impl Components {
     }
 }
 
+/// Split `#/components/{kind}/{name}[/tail...]` into the component and the
+/// raw tail after the name token. The name token is RFC 6901 decoded; the tail
+/// is returned as written, so a rename keeps a deeper pointer's suffix.
+fn split_component_pointer(target: &str) -> Option<(ComponentRef, Option<&str>)> {
+    let rest = target.strip_prefix("#/components/")?;
+    let mut parts = rest.splitn(3, '/');
+    let kind = ComponentKind::from_key(parts.next()?)?;
+    let name_token = parts.next()?;
+    let tail = parts.next();
+    let name = json_pointer::tokens(&format!("/{name_token}")).ok()?;
+    let [name] = <[String; 1]>::try_from(name).ok()?;
+    Some((ComponentRef { kind, name }, tail))
+}
+
 /// A `discriminator.mapping` value with no pointer or file part is a schema
 /// component name.
 pub(crate) fn is_bare_name(target: &str) -> bool {
@@ -654,7 +671,7 @@ impl VisitMut for Rename<'_> {
             }
             return;
         }
-        let Ok(mut component) = ComponentRef::parse(site.target) else {
+        let Some((mut component, tail)) = split_component_pointer(site.target) else {
             return;
         };
         let Some(new_name) = self.renames.get(&component) else {
@@ -664,7 +681,12 @@ impl VisitMut for Rename<'_> {
             return;
         }
         component.name = new_name.clone();
-        *site.target = component.to_pointer();
+        let mut pointer = component.to_pointer();
+        if let Some(tail) = tail {
+            pointer.push('/');
+            pointer.push_str(tail);
+        }
+        *site.target = pointer;
     }
 
     fn security_requirement(&mut self, requirement: &mut crate::SecurityRequirement) {

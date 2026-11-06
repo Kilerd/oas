@@ -893,3 +893,30 @@ fn nested_schema_extension_maps_are_reported() {
         );
     }
 }
+
+#[test]
+fn rename_refs_keeps_the_tail_of_a_deeper_pointer() {
+    let mut doc: OpenAPIV3 = serde_json::from_value(json!({
+        "openapi": "3.1.0",
+        "info": {"title": "t", "version": "1"},
+        "paths": {"/x": {"get": {"responses": {"200": {
+            "description": "ok",
+            "content": {"application/json": {"schema": {
+                "$ref": "#/components/schemas/Foo/properties/bar"
+            }}}
+        }}}}},
+        "components": {"schemas": {"Foo": {"type": "object"}}}
+    }))
+    .unwrap();
+    doc.rename_refs(&BTreeMap::from([(
+        ComponentRef::new(ComponentKind::Schemas, "Foo"),
+        "Renamed".to_string(),
+    )]));
+    let value = serde_json::to_value(&doc).unwrap();
+    assert_eq!(
+        value["paths"]["/x"]["get"]["responses"]["200"]["content"]["application/json"]["schema"]
+            ["$ref"],
+        "#/components/schemas/Renamed/properties/bar",
+        "a deeper pointer must keep its tail after the component name changes"
+    );
+}
