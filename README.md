@@ -164,6 +164,10 @@ walks it backwards, and `RefGraph::roots` resolves the references an `Operation`
 writes itself (`Operation::refs`). Components whose closure reaches an unresolvable
 reference are listed in `RefGraph::broken` with the first `RefError`.
 
+`PathItem::operations` / `operations_mut` iterate present operations in method
+order, and `Responses::iter` / `iter_mut` iterate its default entry and status
+codes. `ParameterIn` is `Copy` and `Ord` and exposes `as_str`.
+
 `OpenAPIV3::rename_refs`, `Operation::rename_refs`, `PathItem::rename_refs` and
 `Components::rename_refs` rewrite reference targets through a
 `BTreeMap<ComponentRef, String>`, including `discriminator.mapping` values and

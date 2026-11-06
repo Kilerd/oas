@@ -1,13 +1,25 @@
 use serde::{Deserialize, Serialize};
 
 /// The location of the parameter.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum ParameterIn {
     Query,
     Header,
     Path,
     Cookie,
+}
+
+impl ParameterIn {
+    /// The wire spelling of this location.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Query => "query",
+            Self::Header => "header",
+            Self::Path => "path",
+            Self::Cookie => "cookie",
+        }
+    }
 }
 
 #[cfg(test)]

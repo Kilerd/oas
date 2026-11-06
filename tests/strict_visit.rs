@@ -1185,3 +1185,87 @@ fn graph_edges_are_deduplicated() {
         "a component references another once even when several positions do"
     );
 }
+
+#[test]
+fn path_item_operations_and_responses_follow_specification_order() {
+    let mut doc: OpenAPIV3 = serde_json::from_value(json!({
+        "openapi": "3.1.0",
+        "info": {"title": "t", "version": "1"},
+        "paths": {"/x": {
+            "get": {"responses": {"200": {"description": "ok"}, "default": {"description": "fallback"}}},
+            "post": {"responses": {"201": {"description": "made"}}},
+            "parameters": [{"name": "q", "in": "query"}]
+        }}
+    }))
+    .unwrap();
+    let item = &doc.paths["/x"];
+    assert_eq!(
+        item.operations()
+            .map(|(method, _)| method)
+            .collect::<Vec<_>>(),
+        ["get", "post"]
+    );
+    let responses = &item.get.as_ref().unwrap().responses;
+    assert_eq!(
+        responses
+            .iter()
+            .map(|(status, _)| status)
+            .collect::<Vec<_>>(),
+        ["default", "200"]
+    );
+
+    for (method, operation) in doc.paths.get_mut("/x").unwrap().operations_mut() {
+        operation.summary = Some(method.to_string());
+    }
+    let item = &doc.paths["/x"];
+    assert_eq!(item.get.as_ref().unwrap().summary.as_deref(), Some("get"));
+    assert_eq!(item.post.as_ref().unwrap().summary.as_deref(), Some("post"));
+    for (status, response) in doc
+        .paths
+        .get_mut("/x")
+        .unwrap()
+        .get
+        .as_mut()
+        .unwrap()
+        .responses
+        .iter_mut()
+    {
+        if let oas::Referenceable::Data(response) = response {
+            response.description = format!("seen {status}");
+        }
+    }
+    assert_eq!(
+        doc.paths["/x"].get.as_ref().unwrap().responses.data["200"]
+            .as_data()
+            .unwrap()
+            .description,
+        "seen 200"
+    );
+}
+
+#[test]
+fn parameter_location_helpers_are_copy_ordered_and_spelled() {
+    use oas::ParameterIn;
+
+    let copied = ParameterIn::Header;
+    let mut locations = vec![
+        ParameterIn::Cookie,
+        copied,
+        ParameterIn::Query,
+        ParameterIn::Path,
+    ];
+    locations.sort();
+    assert_eq!(
+        locations,
+        [
+            ParameterIn::Query,
+            ParameterIn::Header,
+            ParameterIn::Path,
+            ParameterIn::Cookie
+        ]
+    );
+    assert_eq!(ParameterIn::Query.as_str(), "query");
+    assert_eq!(ParameterIn::Header.as_str(), "header");
+    assert_eq!(ParameterIn::Path.as_str(), "path");
+    assert_eq!(ParameterIn::Cookie.as_str(), "cookie");
+}

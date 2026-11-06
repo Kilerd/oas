@@ -500,6 +500,10 @@ impl ComponentValue<'_> {
 }
 
 /// Components are equal when they have the same kind and the same JSON value.
+///
+/// The strict model types do not implement a field-wise `PartialEq`: several
+/// flattened extras and typed fields can represent the same JSON differently,
+/// so their derived equality would disagree with this JSON equality.
 impl PartialEq for ComponentValue<'_> {
     fn eq(&self, other: &Self) -> bool {
         self.kind() == other.kind() && self.to_value() == other.to_value()
