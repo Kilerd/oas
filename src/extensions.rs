@@ -32,7 +32,8 @@ impl OpenAPIV3 {
             openapi: "3.0.0".to_string(),
             info,
             servers: None,
-            paths: BTreeMap::new(),
+            paths: Paths::default(),
+            webhooks: None,
             components: None,
             security: None,
             tags: None,
@@ -47,7 +48,10 @@ impl OpenAPIV3 {
     }
 
     pub fn with_paths(mut self, paths: BTreeMap<String, PathItem>) -> Self {
-        self.paths = paths;
+        self.paths = Paths {
+            paths,
+            ..Paths::default()
+        };
         self
     }
 
@@ -706,6 +710,66 @@ impl Referenceable<RequestBody> {
             MediaType::new().with_schema(schema),
         );
         Self::data(RequestBody::new(content))
+    }
+}
+
+impl PathItem {
+    /// The operations present, in specification method order.
+    pub fn operations(&self) -> impl Iterator<Item = (&'static str, &Operation)> {
+        [
+            ("get", self.get.as_deref()),
+            ("put", self.put.as_deref()),
+            ("post", self.post.as_deref()),
+            ("delete", self.delete.as_deref()),
+            ("options", self.options.as_deref()),
+            ("head", self.head.as_deref()),
+            ("patch", self.patch.as_deref()),
+            ("trace", self.trace.as_deref()),
+        ]
+        .into_iter()
+        .filter_map(|(method, operation)| operation.map(|operation| (method, operation)))
+    }
+
+    /// The mutable form of [`PathItem::operations`].
+    pub fn operations_mut(&mut self) -> impl Iterator<Item = (&'static str, &mut Operation)> {
+        [
+            ("get", self.get.as_deref_mut()),
+            ("put", self.put.as_deref_mut()),
+            ("post", self.post.as_deref_mut()),
+            ("delete", self.delete.as_deref_mut()),
+            ("options", self.options.as_deref_mut()),
+            ("head", self.head.as_deref_mut()),
+            ("patch", self.patch.as_deref_mut()),
+            ("trace", self.trace.as_deref_mut()),
+        ]
+        .into_iter()
+        .filter_map(|(method, operation)| operation.map(|operation| (method, operation)))
+    }
+}
+
+impl Responses {
+    /// The `default` entry, then the status codes in map order.
+    pub fn iter(&self) -> impl Iterator<Item = (&str, &Referenceable<Response>)> + '_ {
+        self.default
+            .iter()
+            .map(|response| ("default", response))
+            .chain(
+                self.data
+                    .iter()
+                    .map(|(status, response)| (status.as_str(), response)),
+            )
+    }
+
+    /// The mutable form of [`Responses::iter`].
+    pub fn iter_mut(&mut self) -> impl Iterator<Item = (&str, &mut Referenceable<Response>)> + '_ {
+        self.default
+            .iter_mut()
+            .map(|response| ("default", response))
+            .chain(
+                self.data
+                    .iter_mut()
+                    .map(|(status, response)| (status.as_str(), response)),
+            )
     }
 }
 

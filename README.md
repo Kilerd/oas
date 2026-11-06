@@ -120,6 +120,60 @@ let reference: Referenceable<Response> =
 let media = MediaType::new().with_schema(Referenceable::string_schema());
 ```
 
+## Traversal, reference graphs and renaming
+
+The strict model has no built-in walk over its object types. `oas::visit` provides
+one: `Visit` and `VisitMut` report every reference position, every Schema Object,
+every unmodeled/extension map, and every security requirement key.
+
+```rust
+use oas::visit::{ComponentKind, RefSite, Visit};
+use oas::{OpenAPIV3, Schema};
+
+struct Counts { schemas: usize, references: usize }
+impl Visit for Counts {
+    fn schema(&mut self, _schema: &Schema) { self.schemas += 1; }
+    fn reference(&mut self, site: RefSite<'_>) {
+        if site.kind == ComponentKind::Schemas { self.references += 1; }
+    }
+}
+
+let mut doc: OpenAPIV3 = serde_json::from_value(serde_json::json!({
+    "openapi": "3.1.0",
+    "info": {"title": "t", "version": "1"},
+    "paths": {},
+    "components": {"schemas": {
+        "A": {"$ref": "#/components/schemas/B"},
+        "B": {"type": "string"}
+    }}
+}))
+.unwrap();
+let mut counts = Counts { schemas: 0, references: 0 };
+doc.walk(&mut counts);
+assert_eq!((counts.schemas, counts.references), (2, 1));
+```
+
+References carry the component kind of their position, not the kind their pointer
+happens to name. `$dynamicRef` and `$recursiveRef` with a string value are reported
+with `RefSite::dynamic` set. Literal data (`example`, `examples` values, `default`,
+`enum`, `const`, extension values) is never visited.
+
+`OpenAPIV3::ref_graph` (or `Components::ref_graph`) builds a component-to-component
+graph once. `RefGraph::closure` follows it to a fixpoint, `RefGraph::dependents`
+walks it backwards, and `RefGraph::roots` resolves the references an `Operation`
+writes itself (`Operation::refs`). Components whose closure reaches an unresolvable
+reference are listed in `RefGraph::broken` with the first `RefError`.
+
+`PathItem::operations` / `operations_mut` iterate present operations in method
+order, and `Responses::iter` / `iter_mut` iterate its default entry and status
+codes. `ParameterIn` is `Copy` and `Ord` and exposes `as_str`.
+
+`OpenAPIV3::rename_refs`, `Operation::rename_refs`, `PathItem::rename_refs` and
+`Components::rename_refs` rewrite reference targets through a
+`BTreeMap<ComponentRef, String>`, including `discriminator.mapping` values and
+security requirement keys for renamed security schemes. `Components::copy_from`
+copies components under new names and rewrites the references inside them.
+
 ## OpenAPI 3.2 and SSE
 
 `MediaType.item_schema` serializes as `itemSchema` and describes each parsed stream
@@ -194,6 +248,12 @@ From a checkout, run `cargo run --example sse`. The
 [JSON fixture](https://github.com/Kilerd/oas/blob/main/examples/v3.2/json/sse.json)
 also demonstrates using `schema` and `itemSchema` together and retaining reference
 siblings in a round trip.
+
+The 3.2-only positions `PathItem.query`, `PathItem.additionalOperations`,
+`MediaType.itemEncoding`, `MediaType.prefixEncoding` and `components.mediaTypes`
+are not modeled. They stay in their object's `extras` map and are reported
+through `visit::Visit::extensions`; the visitor does not walk references or
+schemas inside them.
 
 ## Loading JSON
 

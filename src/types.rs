@@ -4,6 +4,7 @@
 //! additionally support modern schemas and streaming items; see MIGRATION.md for
 //! the remaining 3.1/3.2 model differences.
 
+use serde::ser::SerializeMap;
 use serde::{Deserialize, Serialize};
 use serde_with::skip_serializing_none;
 use std::collections::BTreeMap;
@@ -252,6 +253,118 @@ impl<T> Referenceable<T> {
     }
 }
 
+/// The Paths Object: every path template with its Path Item, plus `x-*`
+/// extensions.
+///
+/// A key starting with `x-` is a Paths extension and never a path; the rest
+/// are path templates. Indexing and map methods such as `insert`, `get`,
+/// `values` and `retain` dereference to [`Paths::paths`].
+#[derive(Debug, Clone, Default)]
+pub struct Paths {
+    /// Path templates such as `/users/{id}` and their Path Items.
+    pub paths: BTreeMap<String, PathItem>,
+    /// Unmodeled fields, including `x-*` extensions, retained as JSON values.
+    pub extras: BTreeMap<String, Any>,
+}
+
+impl Paths {
+    /// An empty Paths Object.
+    pub fn new() -> Self {
+        Self::default()
+    }
+}
+
+impl From<BTreeMap<String, PathItem>> for Paths {
+    fn from(paths: BTreeMap<String, PathItem>) -> Self {
+        Self {
+            paths,
+            extras: BTreeMap::new(),
+        }
+    }
+}
+
+impl FromIterator<(String, PathItem)> for Paths {
+    fn from_iter<I: IntoIterator<Item = (String, PathItem)>>(iter: I) -> Self {
+        Self {
+            paths: iter.into_iter().collect(),
+            extras: BTreeMap::new(),
+        }
+    }
+}
+
+impl std::ops::Deref for Paths {
+    type Target = BTreeMap<String, PathItem>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.paths
+    }
+}
+
+impl std::ops::DerefMut for Paths {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.paths
+    }
+}
+
+impl Serialize for Paths {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        let mut map = serializer.serialize_map(Some(self.paths.len() + self.extras.len()))?;
+        for (key, value) in &self.paths {
+            map.serialize_entry(key, value)?;
+        }
+        for (key, value) in &self.extras {
+            map.serialize_entry(key, value)?;
+        }
+        map.end()
+    }
+}
+
+impl<'de> Deserialize<'de> for Paths {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let fields = BTreeMap::<String, Any>::deserialize(deserializer)?;
+        let mut paths = BTreeMap::new();
+        let mut extras = BTreeMap::new();
+        for (key, value) in fields {
+            if key.starts_with("x-") {
+                extras.insert(key, value);
+            } else {
+                paths.insert(
+                    key,
+                    serde_json::from_value(value).map_err(serde::de::Error::custom)?,
+                );
+            }
+        }
+        Ok(Self { paths, extras })
+    }
+}
+
+impl<'a> IntoIterator for &'a Paths {
+    type Item = (&'a String, &'a PathItem);
+    type IntoIter = std::collections::btree_map::Iter<'a, String, PathItem>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.paths.iter()
+    }
+}
+
+impl<'a> IntoIterator for &'a mut Paths {
+    type Item = (&'a String, &'a mut PathItem);
+    type IntoIter = std::collections::btree_map::IterMut<'a, String, PathItem>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.paths.iter_mut()
+    }
+}
+
+impl IntoIterator for Paths {
+    type Item = (String, PathItem);
+    type IntoIter = std::collections::btree_map::IntoIter<String, PathItem>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.paths.into_iter()
+    }
+}
+
 /// The root OpenAPI v3 document, defaulting to 3.0.0 for existing constructors.
 ///
 /// This is the main entry point for an OpenAPI specification document. It contains
@@ -296,7 +409,14 @@ pub struct OpenAPIV3 {
     ///
     /// This is a map where keys are path templates (like `/users/{id}`) and values
     /// are PathItem objects describing the operations available on those paths.
-    pub paths: BTreeMap<String, PathItem>,
+    /// Keys starting with `x-` are Paths extensions.
+    pub paths: Paths,
+
+    /// Incoming webhooks described by Path Item objects, keyed by name.
+    ///
+    /// OpenAPI 3.1 and later place webhooks at the document root; they are not
+    /// part of `paths` and are not served by a route table.
+    pub webhooks: Option<BTreeMap<String, PathItem>>,
 
     /// An element to hold various schemas for the specification.
     ///
@@ -724,19 +844,32 @@ impl<'de> Deserialize<'de> for Callback {
             extras: BTreeMap::new(),
         };
         for (key, value) in fields {
-            #[cfg(feature = "lossless-schema-keywords")]
             if key == "$ref" {
-                callback.reference = crate::lossless_component::Field::from_value(value);
+                #[cfg(feature = "lossless-schema-keywords")]
+                {
+                    callback.reference = crate::lossless_component::Field::from_value(value);
+                }
+                #[cfg(not(feature = "lossless-schema-keywords"))]
+                {
+                    callback.extras.insert(key, value);
+                }
                 continue;
             }
-            // Extensions remain opaque even when their names contain braces.
-            if !key.starts_with("x-") && key.contains('{') {
+            // Reference Object annotations stay with the reference; every
+            // other non-extension object is a callback expression, including a
+            // constant URL without braces. Extensions and non-object values
+            // remain opaque in extras, so one malformed entry does not reject
+            // the whole document.
+            if matches!(key.as_str(), "summary" | "description")
+                || key.starts_with("x-")
+                || !value.is_object()
+            {
+                callback.extras.insert(key, value);
+            } else {
                 callback.data.insert(
                     key,
                     serde_json::from_value(value).map_err(serde::de::Error::custom)?,
                 );
-            } else {
-                callback.extras.insert(key, value);
             }
         }
         Ok(callback)

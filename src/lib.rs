@@ -75,6 +75,7 @@ mod parameter_location;
 mod schema;
 pub mod security;
 pub mod types;
+pub mod visit;
 
 // Re-export main types for convenience
 #[cfg(feature = "lossless-schema-keywords")]

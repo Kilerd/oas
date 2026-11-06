@@ -104,8 +104,14 @@ fn malformed_patterned_entries_are_not_hidden_as_metadata() {
         "{$request.query.callback}",
         "https://example.com/{$request.body#/id}",
     ] {
-        assert!(serde_json::from_value::<oas::Callback>(json!({key: false})).is_err(),
-            "must reject malformed callback path items, otherwise expression entries become opaque metadata");
+        let callback: oas::Callback = serde_json::from_value(json!({key: false}))
+            .expect("a non-object callback value stays in extras");
+        assert_eq!(callback.extras[key], json!(false));
+        assert!(!callback.data.contains_key(key));
+        assert!(
+            serde_json::from_value::<oas::Callback>(json!({key: {"get": false}})).is_err(),
+            "an object callback expression must still decode as a Path Item"
+        );
     }
 }
 
