@@ -1050,3 +1050,70 @@ fn constant_callback_urls_are_path_items() {
         "references inside a constant-URL callback must be walked: {found:?}"
     );
 }
+
+/// Documents the 3.2 positions the strict model leaves in extras. If one is
+/// modeled later, this test must change together with the visitor.
+#[test]
+fn unmodeled_openapi_3_2_positions_stay_in_extras() {
+    let doc: OpenAPIV3 = serde_json::from_value(json!({
+        "openapi": "3.2.0",
+        "info": {"title": "t", "version": "1"},
+        "paths": {"/x": {
+            "query": {"responses": {"200": {"$ref": "#/components/responses/Ok"}}},
+            "additionalOperations": {"COPY": {"responses": {"200": {"$ref": "#/components/responses/Ok"}}}},
+            "get": {"responses": {"200": {"description": "ok", "content": {
+                "application/json": {
+                    "itemEncoding": {"x-item": true},
+                    "prefixEncoding": {"x-prefix": true},
+                    "schema": {"$ref": "#/components/schemas/S"}
+                }
+            }}}}
+        }},
+        "components": {
+            "mediaTypes": {"json": {"schema": {"type": "object"}}},
+            "responses": {"Ok": {"description": "ok"}},
+            "schemas": {"S": {"type": "string"}}
+        }
+    }))
+    .unwrap();
+    let item = &doc.paths["/x"];
+    assert!(item.extras.contains_key("query"));
+    assert!(item.extras.contains_key("additionalOperations"));
+    let media = item.get.as_ref().unwrap().responses.data["200"]
+        .as_data()
+        .unwrap()
+        .content
+        .as_ref()
+        .unwrap()["application/json"]
+        .clone();
+    assert!(media.extras.contains_key("itemEncoding"));
+    assert!(media.extras.contains_key("prefixEncoding"));
+    assert!(doc
+        .components
+        .as_ref()
+        .unwrap()
+        .extras
+        .contains_key("mediaTypes"));
+
+    let mut extensions = Extensions::default();
+    doc.walk(&mut extensions);
+    for key in [
+        "query",
+        "additionalOperations",
+        "itemEncoding",
+        "prefixEncoding",
+        "mediaTypes",
+    ] {
+        assert!(extensions.0.contains(key), "{key} must reach extensions");
+    }
+    let found = references(&doc);
+    assert!(found
+        .iter()
+        .any(|(_, target, _)| target == "#/components/schemas/S"));
+    assert!(
+        !found
+            .iter()
+            .any(|(_, target, _)| target == "#/components/responses/Ok"),
+        "unmodeled 3.2 operation positions are data, not walked references"
+    );
+}

@@ -13,6 +13,21 @@
 //! string is reported with [`RefSite::dynamic`] set; [`RefGraph`] resolves any
 //! such site to [`RefError::Dynamic`] instead of following it.
 //!
+//! ## Positions that are not walked
+//!
+//! The strict model does not type these OpenAPI 3.2 positions, so they sit in
+//! their object's unmodeled map and are not traversed for references or
+//! schemas:
+//!
+//! - `PathItem.query` and `PathItem.additionalOperations` (in
+//!   [`PathItem::extras`](crate::PathItem));
+//! - `MediaType.itemEncoding` and `MediaType.prefixEncoding` (in
+//!   [`MediaType::extras`](crate::MediaType));
+//! - `components.mediaTypes` (in [`Components::extras`](crate::Components)).
+//!
+//! They are still visible through [`Visit::extensions`], but a reference or
+//! schema inside them is data as far as this visitor is concerned.
+//!
 //! `Link.operationRef` is reported as a `pathItems` reference when it points
 //! under `#/components/pathItems/`; a relative or external operation reference
 //! is not followed. `Link.parameters` and `Link.requestBody` are data.

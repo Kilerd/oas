@@ -245,6 +245,12 @@ From a checkout, run `cargo run --example sse`. The
 also demonstrates using `schema` and `itemSchema` together and retaining reference
 siblings in a round trip.
 
+The 3.2-only positions `PathItem.query`, `PathItem.additionalOperations`,
+`MediaType.itemEncoding`, `MediaType.prefixEncoding` and `components.mediaTypes`
+are not modeled. They stay in their object's `extras` map and are reported
+through `visit::Visit::extensions`; the visitor does not walk references or
+schemas inside them.
+
 ## Loading JSON
 
 ```rust
