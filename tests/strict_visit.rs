@@ -36,8 +36,8 @@ impl Visit for Extensions {
 struct Schemes(Vec<String>);
 
 impl Visit for Schemes {
-    fn security_scheme(&mut self, name: &str) {
-        self.0.push(name.to_owned());
+    fn security_requirement(&mut self, requirement: &oas::SecurityRequirement) {
+        self.0.extend(requirement.data.keys().cloned());
     }
 }
 
@@ -743,4 +743,39 @@ fn webhooks_are_typed_and_walked() {
         "#/components/responses/Success",
         "rename_refs must rewrite references inside webhooks"
     );
+}
+
+#[test]
+fn renaming_security_requirements_keeps_every_key_and_unions_scopes() {
+    let key = |name: &str| ComponentRef::new(ComponentKind::SecuritySchemes, name);
+    let mut doc: OpenAPIV3 = serde_json::from_value(json!({
+        "openapi": "3.1.0",
+        "info": {"title": "t", "version": "1"},
+        "paths": {},
+        "security": [{"K": ["r"], "L": ["w"]}]
+    }))
+    .unwrap();
+    doc.rename_refs(&BTreeMap::from([
+        (key("K"), "L".to_string()),
+        (key("L"), "K".to_string()),
+    ]));
+    let value = serde_json::to_value(&doc).unwrap();
+    assert_eq!(value["security"][0]["L"], json!(["r"]));
+    assert_eq!(value["security"][0]["K"], json!(["w"]));
+
+    let mut doc: OpenAPIV3 = serde_json::from_value(json!({
+        "openapi": "3.1.0",
+        "info": {"title": "t", "version": "1"},
+        "paths": {},
+        "security": [{"K": ["r"], "L": ["w"]}]
+    }))
+    .unwrap();
+    doc.rename_refs(&BTreeMap::from([(key("K"), "L".to_string())]));
+    let value = serde_json::to_value(&doc).unwrap();
+    assert_eq!(
+        value["security"][0]["L"],
+        json!(["r", "w"]),
+        "a collision unions the scopes instead of overwriting one"
+    );
+    assert!(value["security"][0].get("K").is_none());
 }

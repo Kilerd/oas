@@ -12,32 +12,7 @@
 
 use std::collections::BTreeMap;
 
-use super::{Visit, VisitMut};
 use crate::Any;
-
-/// A read-only security requirement keeps the key.
-fn read_security<V: Visit + ?Sized>(visit: &mut V, data: &BTreeMap<String, Vec<String>>) {
-    for name in data.keys() {
-        visit.security_scheme(name);
-    }
-}
-
-/// A mutable security requirement replaces the key when the visitor asks.
-fn write_security<V: VisitMut + ?Sized>(visit: &mut V, data: &mut BTreeMap<String, Vec<String>>) {
-    let mut renames = Vec::new();
-    for name in data.keys() {
-        if let Some(new_name) = visit.security_scheme(name) {
-            if new_name != *name {
-                renames.push((name.clone(), new_name));
-            }
-        }
-    }
-    for (from, to) in renames {
-        if let Some(scopes) = data.remove(&from) {
-            data.insert(to, scopes);
-        }
-    }
-}
 
 fn read_dynamic<'a>(extras: &'a BTreeMap<String, Any>, key: &str) -> Option<&'a str> {
     extras.get(key).and_then(Any::as_str)
@@ -56,7 +31,7 @@ fn write_dynamic<'a>(extras: &'a mut BTreeMap<String, Any>, key: &str) -> Option
 /// Parameters: module, visitor trait, reference site type, mutability token,
 /// iterator, map-values accessor, `Option::as_deref`, `Option::as_ref`,
 /// `BTreeMap::get`, `Value::as_object`, `Field::as_value`, schema child
-/// visitor, security helper, dynamic-reference helper.
+/// visitor, dynamic-reference helper.
 macro_rules! walkers {
     (
         $module:ident,
@@ -71,7 +46,6 @@ macro_rules! walkers {
         $as_object:ident,
         $field_as:ident,
         $child:ident,
-        $security:ident,
         $dynamic:ident $(,)?
     ) => {
         pub(crate) mod $module {
@@ -123,7 +97,7 @@ macro_rules! walkers {
                 if let Some(components) = components {
                     components_node(visit, components);
                 }
-                security_requirements(visit, security.$as_deref());
+                security_requirements(visit, security);
                 for tag in tags.$iter().flatten() {
                     tag_node(visit, tag);
                 }
@@ -482,7 +456,7 @@ macro_rules! walkers {
                         callback_node(visit, data)
                     });
                 }
-                security_requirements(visit, security.$as_deref());
+                security_requirements(visit, security);
                 for server in servers.$iter().flatten() {
                     server_node(visit, server);
                 }
@@ -823,14 +797,12 @@ macro_rules! walkers {
 
             fn security_requirements<V: crate::visit::$visitor + ?Sized>(
                 visit: &mut V,
-                $($mutability)? requirements: Option<& $($mutability)? [SecurityRequirement]>,
+                requirements: & $($mutability)? Option<Vec<SecurityRequirement>>,
             ) {
-                for requirement in requirements
-                    .$iter()
-                    .flat_map(|list| list.$iter())
-                {
-                    let SecurityRequirement { data } = requirement;
-                    super::$security(visit, data);
+                if let Some(requirements) = requirements {
+                    for requirement in requirements {
+                        visit.security_requirement(requirement);
+                    }
                 }
             }
 
@@ -974,7 +946,6 @@ walkers!(
     as_object,
     as_value,
     try_for_each_child_with_keyword,
-    read_security,
     read_dynamic
 );
 
@@ -993,6 +964,5 @@ walkers!(
     as_object_mut,
     as_value_mut,
     try_for_each_child_mut_with_keyword,
-    write_security,
     write_dynamic
 );

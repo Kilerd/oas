@@ -301,8 +301,9 @@ pub trait Visit {
     fn schema(&mut self, _schema: &Schema) {}
     /// The unmodeled and `x-*` keys of one object.
     fn extensions(&mut self, _extensions: &BTreeMap<String, Any>) {}
-    /// A security requirement key, which names a `securitySchemes` component.
-    fn security_scheme(&mut self, _name: &str) {}
+    /// One security requirement, whose keys name `securitySchemes`
+    /// components.
+    fn security_requirement(&mut self, _requirement: &crate::SecurityRequirement) {}
 }
 
 /// Mutable visitor over the strict model. Every method does nothing by default.
@@ -313,13 +314,10 @@ pub trait VisitMut {
     fn schema(&mut self, _schema: &mut Schema) {}
     /// The unmodeled and `x-*` keys of one object.
     fn extensions(&mut self, _extensions: &mut BTreeMap<String, Any>) {}
-    /// A security requirement key, which names a `securitySchemes` component.
-    ///
-    /// Return `Some(new_name)` to replace the key. The default leaves it
-    /// unchanged; a map key cannot be borrowed mutably in place.
-    fn security_scheme(&mut self, _name: &str) -> Option<String> {
-        None
-    }
+    /// One security requirement, whose keys name `securitySchemes`
+    /// components. Rebuilding `requirement.data` makes a rename collision
+    /// explicit; the default leaves it unchanged.
+    fn security_requirement(&mut self, _requirement: &mut crate::SecurityRequirement) {}
 }
 
 /// One component value, borrowed from its group.
@@ -640,9 +638,19 @@ impl VisitMut for Rename<'_> {
         *site.target = component.to_pointer();
     }
 
-    fn security_scheme(&mut self, name: &str) -> Option<String> {
-        let component = ComponentRef::new(ComponentKind::SecuritySchemes, name);
-        self.renames.get(&component).cloned()
+    fn security_requirement(&mut self, requirement: &mut crate::SecurityRequirement) {
+        let mut rebuilt: BTreeMap<String, Vec<String>> = BTreeMap::new();
+        for (name, scopes) in std::mem::take(&mut requirement.data) {
+            let component = ComponentRef::new(ComponentKind::SecuritySchemes, &name);
+            let new_name = self.renames.get(&component).cloned().unwrap_or(name);
+            let merged = rebuilt.entry(new_name).or_default();
+            for scope in scopes {
+                if !merged.contains(&scope) {
+                    merged.push(scope);
+                }
+            }
+        }
+        requirement.data = rebuilt;
     }
 }
 
