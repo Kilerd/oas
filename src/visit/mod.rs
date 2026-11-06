@@ -234,6 +234,9 @@ pub enum RefError {
     },
     /// A `$dynamicRef` or `$recursiveRef`; these are not followed statically.
     Dynamic,
+    /// [`Components::copy_from`] found a different component at the target
+    /// name.
+    Conflict(ComponentRef),
 }
 
 impl fmt::Display for RefError {
@@ -251,6 +254,12 @@ impl fmt::Display for RefError {
                 found.key()
             ),
             Self::Dynamic => formatter.write_str("a dynamic reference"),
+            Self::Conflict(component) => {
+                write!(
+                    formatter,
+                    "a different component already exists at {component}"
+                )
+            }
         }
     }
 }
@@ -548,17 +557,21 @@ impl Components {
     /// Copy components from `source` under the names `renames` gives them, or
     /// under their own names when the map has no entry.
     ///
-    /// A component whose target name is already present is left unchanged.
-    /// References inside each copied component are rewritten through
-    /// `renames`. Returns the components actually inserted, keyed by their new
-    /// names.
+    /// Every requested component is checked first: a missing source component
+    /// or a different component already at a target name returns an error and
+    /// inserts nothing. A target name that already holds an equal component is
+    /// skipped. References inside each copied component are rewritten through
+    /// `renames`. Returns the components inserted, keyed by their new names.
     pub fn copy_from(
         &mut self,
         source: &Components,
         which: impl IntoIterator<Item = ComponentRef>,
         renames: &BTreeMap<ComponentRef, String>,
     ) -> Result<BTreeSet<ComponentRef>, RefError> {
-        let mut copied = BTreeSet::new();
+        // Compare against the value the copy would insert, with the references
+        // inside it already rewritten, so an equal definition is recognised
+        // even when its component names differ.
+        let mut planned: BTreeMap<ComponentRef, (ComponentValue<'_>, Any)> = BTreeMap::new();
         for component in which {
             let Some(value) = source.get(&component) else {
                 return Err(RefError::Missing(component));
@@ -570,9 +583,23 @@ impl Components {
                     .cloned()
                     .unwrap_or_else(|| component.name.clone()),
             );
-            if self.get(&target).is_some() {
-                continue;
+            let renamed = renamed_value(&target, value, renames);
+            if let Some(existing) = self.get(&target) {
+                if existing.to_value() == renamed {
+                    continue;
+                }
+                return Err(RefError::Conflict(target));
             }
+            match planned.get(&target) {
+                Some((_, planned_value)) if *planned_value == renamed => continue,
+                Some(_) => return Err(RefError::Conflict(target)),
+                None => {
+                    planned.insert(target, (value, renamed));
+                }
+            }
+        }
+        let mut copied = BTreeSet::new();
+        for (target, (value, _)) in planned {
             self.insert_component(&target, value);
             self.walk_component_mut(&target, &mut Rename { renames });
             copied.insert(target);
@@ -707,6 +734,22 @@ impl VisitMut for Rename<'_> {
         }
         requirement.data = rebuilt;
     }
+}
+
+/// The JSON value of `value` after it is inserted at `target` and its
+/// references are rewritten through `renames`.
+fn renamed_value(
+    target: &ComponentRef,
+    value: ComponentValue<'_>,
+    renames: &BTreeMap<ComponentRef, String>,
+) -> Any {
+    let mut probe = Components::default();
+    probe.insert_component(target, value);
+    probe.walk_component_mut(target, &mut Rename { renames });
+    probe
+        .get(target)
+        .expect("the probe inserted the component")
+        .to_value()
 }
 
 /// Collects direct references for [`Operation::refs`] and [`RefGraph`].

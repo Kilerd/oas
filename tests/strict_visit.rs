@@ -964,3 +964,50 @@ fn link_operation_refs_under_path_items_are_reported_and_renamed() {
         "other.json#/paths/~1x/get"
     );
 }
+
+#[test]
+fn copy_from_validates_before_inserting_and_rejects_different_collisions() {
+    let source: oas::Components = serde_json::from_value(json!({
+        "schemas": {
+            "A": {"type": "string"},
+            "B": {"type": "integer"},
+            "C": {"type": "boolean"}
+        }
+    }))
+    .unwrap();
+    let missing = ComponentRef::new(ComponentKind::Schemas, "Missing");
+    let a = ComponentRef::new(ComponentKind::Schemas, "A");
+    let b = ComponentRef::new(ComponentKind::Schemas, "B");
+    let c = ComponentRef::new(ComponentKind::Schemas, "C");
+
+    let mut target = oas::Components::default();
+    assert_eq!(
+        target.copy_from(
+            &source,
+            [a.clone(), b.clone(), missing.clone()],
+            &BTreeMap::new()
+        ),
+        Err(RefError::Missing(missing)),
+        "a missing source is validated before any insert"
+    );
+    assert!(target.get(&a).is_none());
+    assert!(target.get(&b).is_none());
+
+    let c_as_b = BTreeMap::from([(c.clone(), "B".to_string())]);
+    target.copy_from(&source, [c.clone()], &c_as_b).unwrap();
+    assert_eq!(
+        target.copy_from(&source, [c], &c_as_b),
+        Ok(BTreeSet::new()),
+        "an equal definition under the target name is skipped"
+    );
+    assert_eq!(
+        target.copy_from(&source, [b.clone()], &BTreeMap::new()),
+        Err(RefError::Conflict(b.clone())),
+        "a different component at the target name is an error"
+    );
+    assert_eq!(
+        target.get(&b).unwrap().to_value(),
+        json!({"type": "boolean"}),
+        "a conflict inserts nothing and leaves the destination unchanged"
+    );
+}
