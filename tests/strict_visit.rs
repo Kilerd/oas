@@ -1352,3 +1352,34 @@ fn constant_callback_expressions_tolerate_non_object_values() {
             && target == "#/components/responses/Ok"));
     assert!(!found.iter().any(|(_, target, _)| target == "hello"));
 }
+
+#[test]
+fn security_requirements_survive_unrelated_renames_unchanged() {
+    let key = |name: &str| ComponentRef::new(ComponentKind::SecuritySchemes, name);
+    let mut doc: OpenAPIV3 = serde_json::from_value(json!({
+        "openapi": "3.1.0",
+        "info": {"title": "t", "version": "1"},
+        "paths": {},
+        "security": [{"K": ["r", "r"]}],
+        "components": {"schemas": {"Z": {"type": "string"}}}
+    }))
+    .unwrap();
+    let before = serde_json::to_value(&doc).unwrap();
+    doc.rename_refs(&BTreeMap::from([(
+        ComponentRef::new(ComponentKind::Schemas, "Z"),
+        "Z2".to_string(),
+    )]));
+    assert_eq!(
+        serde_json::to_value(&doc).unwrap(),
+        before,
+        "a requirement with no renamed key must stay byte-identical, including duplicate scopes"
+    );
+
+    doc.rename_refs(&BTreeMap::from([(key("K"), "L".to_string())]));
+    let value = serde_json::to_value(&doc).unwrap();
+    assert_eq!(
+        value["security"][0]["L"],
+        json!(["r", "r"]),
+        "a renamed requirement keeps its scopes as written when there is no collision"
+    );
+}

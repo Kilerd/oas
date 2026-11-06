@@ -782,14 +782,29 @@ impl VisitMut for Rename<'_> {
     }
 
     fn security_requirement(&mut self, requirement: &mut crate::SecurityRequirement) {
+        let renamed = requirement.data.keys().any(|name| {
+            let component = ComponentRef::new(ComponentKind::SecuritySchemes, name);
+            self.renames
+                .get(&component)
+                .is_some_and(|new_name| new_name != name)
+        });
+        if !renamed {
+            return;
+        }
         let mut rebuilt: BTreeMap<String, Vec<String>> = BTreeMap::new();
         for (name, scopes) in std::mem::take(&mut requirement.data) {
             let component = ComponentRef::new(ComponentKind::SecuritySchemes, &name);
             let new_name = self.renames.get(&component).cloned().unwrap_or(name);
-            let merged = rebuilt.entry(new_name).or_default();
-            for scope in scopes {
-                if !merged.contains(&scope) {
-                    merged.push(scope);
+            match rebuilt.get_mut(&new_name) {
+                Some(existing) => {
+                    for scope in scopes {
+                        if !existing.contains(&scope) {
+                            existing.push(scope);
+                        }
+                    }
+                }
+                None => {
+                    rebuilt.insert(new_name, scopes);
                 }
             }
         }
