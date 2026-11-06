@@ -1,6 +1,6 @@
 use std::collections::{BTreeMap, BTreeSet};
 
-use super::{Collect, ComponentKind, ComponentRef, DirectRef, RefError};
+use super::{is_bare_name, Collect, ComponentKind, ComponentRef, DirectRef, RefError};
 use crate::Components;
 
 /// The component reference graph of one `components` object.
@@ -105,20 +105,7 @@ impl RefGraph {
     }
 
     fn resolve(&self, target: &DirectRef) -> Result<ComponentRef, RefError> {
-        if target.dynamic {
-            return Err(RefError::Dynamic);
-        }
-        let parsed = ComponentRef::parse(&target.target)?;
-        if parsed.kind != target.kind {
-            return Err(RefError::WrongKind {
-                expected: target.kind,
-                found: parsed.kind,
-            });
-        }
-        if !self.edges.contains_key(&parsed) {
-            return Err(RefError::Missing(parsed));
-        }
-        Ok(parsed)
+        resolve(target, |component| self.edges.contains_key(component))
     }
 }
 
@@ -134,7 +121,7 @@ impl Components {
             self.walk_component(&key, &mut collect);
             let mut children = Vec::new();
             for direct in collect.into_inner() {
-                match resolve(self, &direct) {
+                match resolve(&direct, |component| self.get(component).is_some()) {
                     Ok(child) => children.push(child),
                     Err(error) => {
                         broken.entry(key.clone()).or_insert(error);
@@ -172,18 +159,30 @@ impl Components {
     }
 }
 
-fn resolve(components: &Components, target: &DirectRef) -> Result<ComponentRef, RefError> {
+/// Resolve one direct reference against the component names `exists` accepts.
+///
+/// A `discriminator.mapping` value with no `#` or `/` is a bare schema name
+/// and resolves under `components.schemas`. Other targets must be exact
+/// `#/components/{kind}/{name}` pointers.
+fn resolve(
+    target: &DirectRef,
+    exists: impl Fn(&ComponentRef) -> bool,
+) -> Result<ComponentRef, RefError> {
     if target.dynamic {
         return Err(RefError::Dynamic);
     }
-    let parsed = ComponentRef::parse(&target.target)?;
+    let parsed = if target.mapping && is_bare_name(&target.target) {
+        ComponentRef::new(ComponentKind::Schemas, &target.target)
+    } else {
+        ComponentRef::parse(&target.target)?
+    };
     if parsed.kind != target.kind {
         return Err(RefError::WrongKind {
             expected: target.kind,
             found: parsed.kind,
         });
     }
-    if components.get(&parsed).is_none() {
+    if !exists(&parsed) {
         return Err(RefError::Missing(parsed));
     }
     Ok(parsed)

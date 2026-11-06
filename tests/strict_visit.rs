@@ -329,6 +329,7 @@ fn graph_closes_cycles_propagates_broken_and_reverses() {
                 kind: ComponentKind::Schemas,
                 target: "#/components/schemas/A".into(),
                 dynamic: false,
+                mapping: false,
             }])
             .unwrap(),
         BTreeSet::from([key(ComponentKind::Schemas, "A")])
@@ -338,6 +339,7 @@ fn graph_closes_cycles_propagates_broken_and_reverses() {
             kind: ComponentKind::Responses,
             target: "#/components/schemas/A".into(),
             dynamic: false,
+            mapping: false,
         }]),
         Err(RefError::WrongKind {
             expected: ComponentKind::Responses,
@@ -349,6 +351,7 @@ fn graph_closes_cycles_propagates_broken_and_reverses() {
             kind: ComponentKind::Schemas,
             target: "#/components/schemas/Nope".into(),
             dynamic: false,
+            mapping: false,
         }]),
         Err(RefError::Missing(key(ComponentKind::Schemas, "Nope")))
     );
@@ -357,6 +360,7 @@ fn graph_closes_cycles_propagates_broken_and_reverses() {
             kind: ComponentKind::Schemas,
             target: "#meta".into(),
             dynamic: true,
+            mapping: false,
         }]),
         Err(RefError::Dynamic)
     );
@@ -386,11 +390,13 @@ fn operation_refs_are_the_roots_of_its_own_references() {
                 kind: ComponentKind::Parameters,
                 target: "#/components/parameters/P".into(),
                 dynamic: false,
+                mapping: false,
             },
             DirectRef {
                 kind: ComponentKind::Responses,
                 target: "#/components/responses/Ok".into(),
                 dynamic: false,
+                mapping: false,
             }
         ]
     );
@@ -806,6 +812,7 @@ fn operation_refs_and_graph_include_security_schemes() {
             kind: ComponentKind::SecuritySchemes,
             target: "#/components/securitySchemes/K".into(),
             dynamic: false,
+            mapping: false,
         }],
         "an operation's security requirement keys are its roots"
     );
@@ -819,4 +826,44 @@ fn operation_refs_and_graph_include_security_schemes() {
         .roots(operation.refs())
         .unwrap()
         .contains(&ComponentRef::new(ComponentKind::SecuritySchemes, "K")));
+}
+
+#[test]
+fn bare_discriminator_mapping_values_are_schema_components() {
+    let mut doc: OpenAPIV3 = serde_json::from_value(json!({
+        "openapi": "3.1.0",
+        "info": {"title": "t", "version": "1"},
+        "paths": {},
+        "components": {"schemas": {
+            "Pet": {"type": "object", "discriminator": {
+                "propertyName": "kind",
+                "mapping": {"dog": "Dog", "cat": "#/components/schemas/Cat"}
+            }},
+            "Dog": {"type": "object"},
+            "Cat": {"type": "object"}
+        }}
+    }))
+    .unwrap();
+    let pet = ComponentRef::new(ComponentKind::Schemas, "Pet");
+    let dog = ComponentRef::new(ComponentKind::Schemas, "Dog");
+    let cat = ComponentRef::new(ComponentKind::Schemas, "Cat");
+    let graph = doc.ref_graph();
+    assert!(
+        graph.edges()[&pet].contains(&dog),
+        "a bare mapping value names components.schemas"
+    );
+    assert!(graph.edges()[&pet].contains(&cat));
+    assert!(!graph.broken().contains_key(&pet));
+
+    doc.rename_refs(&BTreeMap::from([(dog, "Hound".to_string())]));
+    let value = serde_json::to_value(&doc).unwrap();
+    assert_eq!(
+        value["components"]["schemas"]["Pet"]["discriminator"]["mapping"]["dog"], "Hound",
+        "a bare mapping value stays bare when renamed"
+    );
+    assert_eq!(
+        value["components"]["schemas"]["Pet"]["discriminator"]["mapping"]["cat"],
+        "#/components/schemas/Cat",
+        "a pointer mapping value stays a pointer"
+    );
 }

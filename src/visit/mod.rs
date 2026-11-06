@@ -260,6 +260,8 @@ pub struct DirectRef {
     pub kind: ComponentKind,
     pub target: String,
     pub dynamic: bool,
+    /// True for a `discriminator.mapping` value.
+    pub mapping: bool,
 }
 
 /// A read-only reference site.
@@ -275,6 +277,10 @@ pub struct RefSite<'a> {
     pub extras: Option<&'a BTreeMap<String, Any>>,
     /// True for a `$dynamicRef` or `$recursiveRef` with a string value.
     pub dynamic: bool,
+    /// True for a `discriminator.mapping` value. A bare value (no `#` and no
+    /// `/`) names `components.schemas`; the graph resolves it as such and a
+    /// rename keeps it bare.
+    pub mapping: bool,
 }
 
 /// A mutable reference site.
@@ -290,6 +296,10 @@ pub struct RefSiteMut<'a> {
     pub extras: Option<&'a mut BTreeMap<String, Any>>,
     /// True for a `$dynamicRef` or `$recursiveRef` with a string value.
     pub dynamic: bool,
+    /// True for a `discriminator.mapping` value. A bare value (no `#` and no
+    /// `/`) names `components.schemas`; the graph resolves it as such and a
+    /// rename keeps it bare.
+    pub mapping: bool,
 }
 
 /// Read-only visitor over the strict model. Every method does nothing by
@@ -619,6 +629,12 @@ impl Components {
     }
 }
 
+/// A `discriminator.mapping` value with no pointer or file part is a schema
+/// component name.
+pub(crate) fn is_bare_name(target: &str) -> bool {
+    !target.contains('#') && !target.contains('/')
+}
+
 /// Rewrites reference targets and security requirement keys through a map.
 struct Rename<'a> {
     renames: &'a BTreeMap<ComponentRef, String>,
@@ -627,6 +643,15 @@ struct Rename<'a> {
 impl VisitMut for Rename<'_> {
     fn reference(&mut self, site: RefSiteMut<'_>) {
         if site.dynamic {
+            return;
+        }
+        if site.mapping && is_bare_name(site.target) {
+            let component = ComponentRef::new(ComponentKind::Schemas, site.target.as_str());
+            if let Some(new_name) = self.renames.get(&component) {
+                if *new_name != component.name {
+                    *site.target = new_name.clone();
+                }
+            }
             return;
         }
         let Ok(mut component) = ComponentRef::parse(site.target) else {
@@ -674,6 +699,7 @@ impl Visit for Collect {
             kind: site.kind,
             target: site.target.to_owned(),
             dynamic: site.dynamic,
+            mapping: site.mapping,
         });
     }
 
@@ -683,6 +709,7 @@ impl Visit for Collect {
                 kind: ComponentKind::SecuritySchemes,
                 target: ComponentRef::new(ComponentKind::SecuritySchemes, name).to_pointer(),
                 dynamic: false,
+                mapping: false,
             });
         }
     }

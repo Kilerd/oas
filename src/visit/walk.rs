@@ -393,6 +393,7 @@ macro_rules! walkers {
                         target,
                         extras: Some(extras),
                         dynamic: false,
+                        mapping: false,
                     });
                 }
                 for op in [get, put, post, delete, options, head, patch, trace]
@@ -645,6 +646,7 @@ macro_rules! walkers {
                         target,
                         extras: Some(extras),
                         dynamic: false,
+                        mapping: false,
                     });
                 }
                 for item in data.$values() {
@@ -826,6 +828,7 @@ macro_rules! walkers {
                             target: _ref,
                             extras: Some(extras),
                             dynamic: false,
+                            mapping: false,
                         });
                     }
                     Referenceable::Data(data) => inline(data, visit),
@@ -860,6 +863,7 @@ macro_rules! walkers {
                         target,
                         extras: Some(& $($mutability)? schema.extras),
                         dynamic: false,
+                        mapping: false,
                     });
                 }
                 for key in ["$dynamicRef", "$recursiveRef"] {
@@ -869,6 +873,7 @@ macro_rules! walkers {
                             target,
                             extras: None,
                             dynamic: true,
+                            mapping: false,
                         });
                     }
                 }
@@ -901,6 +906,7 @@ macro_rules! walkers {
                                         target,
                                         extras: None,
                                         dynamic: false,
+                                        mapping: true,
                                     });
                                 }
                             }
@@ -922,6 +928,7 @@ macro_rules! walkers {
                                 target,
                                 extras: None,
                                 dynamic: false,
+                                mapping: true,
                             });
                         }
                     }
