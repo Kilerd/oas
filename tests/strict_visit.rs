@@ -779,3 +779,44 @@ fn renaming_security_requirements_keeps_every_key_and_unions_scopes() {
     );
     assert!(value["security"][0].get("K").is_none());
 }
+
+#[test]
+fn operation_refs_and_graph_include_security_schemes() {
+    let doc: OpenAPIV3 = serde_json::from_value(json!({
+        "openapi": "3.1.0",
+        "info": {"title": "t", "version": "1"},
+        "security": [{"K": []}],
+        "paths": {"/x": {"get": {
+            "security": [{"K": []}],
+            "responses": {"200": {"description": "ok"}}
+        }}},
+        "components": {
+            "securitySchemes": {"K": {"type": "http", "scheme": "bearer"}},
+            "callbacks": {"CB": {"{$request.body#/url}": {"post": {
+                "security": [{"K": []}],
+                "responses": {"200": {"description": "ok"}}
+            }}}}
+        }
+    }))
+    .unwrap();
+    let operation = doc.paths["/x"].get.as_ref().unwrap();
+    assert_eq!(
+        operation.refs(),
+        [DirectRef {
+            kind: ComponentKind::SecuritySchemes,
+            target: "#/components/securitySchemes/K".into(),
+            dynamic: false,
+        }],
+        "an operation's security requirement keys are its roots"
+    );
+    let graph = doc.ref_graph();
+    assert!(
+        graph.edges()[&ComponentRef::new(ComponentKind::Callbacks, "CB")]
+            .contains(&ComponentRef::new(ComponentKind::SecuritySchemes, "K")),
+        "a callback operation's security scheme is a graph edge"
+    );
+    assert!(graph
+        .roots(operation.refs())
+        .unwrap()
+        .contains(&ComponentRef::new(ComponentKind::SecuritySchemes, "K")));
+}

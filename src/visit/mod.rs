@@ -420,6 +420,10 @@ impl Operation {
     }
 
     /// The references this operation writes itself, in walk order.
+    ///
+    /// Security requirement keys are reported as `securitySchemes`
+    /// references. Path-level parameters and the document's root `security`
+    /// are not part of an operation's own roots.
     pub fn refs(&self) -> Vec<DirectRef> {
         let mut collect = Collect::default();
         read::operation(&mut collect, self);
@@ -671,6 +675,16 @@ impl Visit for Collect {
             target: site.target.to_owned(),
             dynamic: site.dynamic,
         });
+    }
+
+    fn security_requirement(&mut self, requirement: &crate::SecurityRequirement) {
+        for name in requirement.data.keys() {
+            self.0.push(DirectRef {
+                kind: ComponentKind::SecuritySchemes,
+                target: ComponentRef::new(ComponentKind::SecuritySchemes, name).to_pointer(),
+                dynamic: false,
+            });
+        }
     }
 }
 
