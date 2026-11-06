@@ -867,3 +867,29 @@ fn bare_discriminator_mapping_values_are_schema_components() {
         "a pointer mapping value stays a pointer"
     );
 }
+
+#[test]
+fn nested_schema_extension_maps_are_reported() {
+    let doc: OpenAPIV3 = serde_json::from_value(json!({
+        "openapi": "3.1.0",
+        "info": {"title": "t", "version": "1"},
+        "paths": {},
+        "components": {"schemas": {"A": {
+            "type": "object",
+            "xml": {"name": "A", "x-xml": true},
+            "discriminator": {"propertyName": "kind", "x-discriminator": true,
+                              "mapping": {"a": "#/components/schemas/B"}},
+            "externalDocs": {"url": "https://e.test", "x-external": true}
+        }}}
+    }))
+    .unwrap();
+    let mut extensions = Extensions::default();
+    doc.walk(&mut extensions);
+    for key in ["x-xml", "x-discriminator", "x-external"] {
+        assert!(
+            extensions.0.contains(key),
+            "{key} must be reported through extensions: {:?}",
+            extensions.0
+        );
+    }
+}

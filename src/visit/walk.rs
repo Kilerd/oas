@@ -25,13 +25,58 @@ fn write_dynamic<'a>(extras: &'a mut BTreeMap<String, Any>, key: &str) -> Option
     }
 }
 
+/// Report extension maps nested in unmodeled schema objects.
+///
+/// `xml` is never a typed field, and `discriminator` / `externalDocs` are
+/// typed only with `lossless-schema-keywords`. Their value objects stay in the
+/// schema's unmodeled map, so their x-* keys are reported as the extension map
+/// of the object they belong to. The read-only form copies the entries; the
+/// mutable form copies them back in their original order after the visitor has
+/// had a chance to remove or edit entries.
+fn read_nested_extensions<V: crate::visit::Visit + ?Sized>(visit: &mut V, schema: &crate::Schema) {
+    for key in ["xml", "discriminator", "externalDocs"] {
+        if let Some(Any::Object(map)) = schema.extras.get(key) {
+            let entries: BTreeMap<String, Any> = map
+                .iter()
+                .map(|(key, value)| (key.clone(), value.clone()))
+                .collect();
+            visit.extensions(&entries);
+        }
+    }
+}
+
+fn write_nested_extensions<V: crate::visit::VisitMut + ?Sized>(
+    visit: &mut V,
+    schema: &mut crate::Schema,
+) {
+    for key in ["xml", "discriminator", "externalDocs"] {
+        let Some(Any::Object(map)) = schema.extras.get_mut(key) else {
+            continue;
+        };
+        let entries: Vec<(String, Any)> = std::mem::take(map).into_iter().collect();
+        let mut fields: BTreeMap<String, Any> = entries
+            .iter()
+            .map(|(key, value)| (key.clone(), value.clone()))
+            .collect();
+        visit.extensions(&mut fields);
+        for (key, _) in entries {
+            if let Some(value) = fields.remove(&key) {
+                map.insert(key, value);
+            }
+        }
+        for (key, value) in fields {
+            map.insert(key, value);
+        }
+    }
+}
+
 /// Generates one walker module. The two invocations below differ only in the
 /// accessors and visitor traits they name.
 ///
 /// Parameters: module, visitor trait, reference site type, mutability token,
 /// iterator, map-values accessor, `Option::as_deref`, `Option::as_ref`,
 /// `BTreeMap::get`, `Value::as_object`, `Field::as_value`, schema child
-/// visitor, dynamic-reference helper.
+/// visitor, dynamic-reference helper, nested-extension helper.
 macro_rules! walkers {
     (
         $module:ident,
@@ -46,7 +91,8 @@ macro_rules! walkers {
         $as_object:ident,
         $field_as:ident,
         $child:ident,
-        $dynamic:ident $(,)?
+        $dynamic:ident,
+        $nested:ident $(,)?
     ) => {
         pub(crate) mod $module {
             use std::convert::Infallible;
@@ -853,6 +899,7 @@ macro_rules! walkers {
             ) {
                 visit.schema(schema);
                 visit.extensions(& $($mutability)? schema.extras);
+                super::$nested(visit, schema);
                 #[cfg(feature = "lossless-schema-keywords")]
                 if let Some(docs) = schema.external_docs.$as_ref() {
                     visit.extensions(& $($mutability)? docs.extras);
@@ -953,7 +1000,8 @@ walkers!(
     as_object,
     as_value,
     try_for_each_child_with_keyword,
-    read_dynamic
+    read_dynamic,
+    read_nested_extensions
 );
 
 // Mutable walker: mutable accessors, `VisitMut`, and a security helper whose
@@ -971,5 +1019,6 @@ walkers!(
     as_object_mut,
     as_value_mut,
     try_for_each_child_mut_with_keyword,
-    write_dynamic
+    write_dynamic,
+    write_nested_extensions
 );
