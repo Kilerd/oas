@@ -1,4 +1,4 @@
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, BTreeSet, VecDeque};
 
 use super::{is_bare_name, Collect, ComponentKind, ComponentRef, DirectRef, RefError};
 use crate::Components;
@@ -27,8 +27,13 @@ impl RefGraph {
         &self.edges
     }
 
-    /// Components whose closure contains an unresolvable reference, with the
-    /// first such error in walk order.
+    /// Components whose closure contains an unresolvable reference.
+    ///
+    /// A component keeps its own first unresolved reference in walk order. A
+    /// component whose own references resolve inherits the error of the first
+    /// broken component reached by a breadth-first pass that starts in
+    /// [`ComponentRef`] order and visits parents in that order, so the result
+    /// does not depend on stack or map iteration.
     pub fn broken(&self) -> &BTreeMap<ComponentRef, RefError> {
         &self.broken
     }
@@ -140,13 +145,13 @@ impl Components {
                     .push(parent.clone());
             }
         }
-        let mut queue: Vec<ComponentRef> = broken.keys().cloned().collect();
-        while let Some(key) = queue.pop() {
+        let mut queue: VecDeque<ComponentRef> = broken.keys().cloned().collect();
+        while let Some(key) = queue.pop_front() {
             let error = broken[&key].clone();
             for parent in parents.get(&key).into_iter().flatten() {
                 if !broken.contains_key(parent) {
                     broken.insert(parent.clone(), error.clone());
-                    queue.push(parent.clone());
+                    queue.push_back(parent.clone());
                 }
             }
         }

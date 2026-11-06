@@ -1117,3 +1117,36 @@ fn unmodeled_openapi_3_2_positions_stay_in_extras() {
         "unmodeled 3.2 operation positions are data, not walked references"
     );
 }
+
+#[test]
+fn propagated_broken_errors_are_deterministic() {
+    let doc: OpenAPIV3 = serde_json::from_value(json!({
+        "openapi": "3.1.0",
+        "info": {"title": "t", "version": "1"},
+        "paths": {},
+        "components": {"schemas": {
+            "A": {"$ref": "#/components/schemas/MissingA"},
+            "Z": {"$ref": "#/components/schemas/MissingZ"},
+            "P": {"allOf": [
+                {"$ref": "#/components/schemas/A"},
+                {"$ref": "#/components/schemas/Z"}
+            ]}
+        }}
+    }))
+    .unwrap();
+    let graph = doc.ref_graph();
+    let key = |name: &str| ComponentRef::new(ComponentKind::Schemas, name);
+    assert_eq!(
+        graph.broken()[&key("P")],
+        RefError::Missing(key("MissingA")),
+        "P inherits the error of the first broken component in ComponentRef order, not the last one popped"
+    );
+    assert_eq!(
+        graph.broken()[&key("A")],
+        RefError::Missing(key("MissingA"))
+    );
+    assert_eq!(
+        graph.broken()[&key("Z")],
+        RefError::Missing(key("MissingZ"))
+    );
+}
