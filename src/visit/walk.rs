@@ -12,6 +12,7 @@
 
 use std::collections::BTreeMap;
 
+use crate::visit::ExtrasOwner;
 use crate::Any;
 
 fn read_dynamic<'a>(extras: &'a BTreeMap<String, Any>, key: &str) -> Option<&'a str> {
@@ -40,7 +41,7 @@ fn read_nested_extensions<V: crate::visit::Visit + ?Sized>(visit: &mut V, schema
                 .iter()
                 .map(|(key, value)| (key.clone(), value.clone()))
                 .collect();
-            visit.extensions(&entries);
+            visit.extensions(ExtrasOwner::Object, &entries);
         }
     }
 }
@@ -58,7 +59,7 @@ fn write_nested_extensions<V: crate::visit::VisitMut + ?Sized>(
             .iter()
             .map(|(key, value)| (key.clone(), value.clone()))
             .collect();
-        visit.extensions(&mut fields);
+        visit.extensions(ExtrasOwner::Object, &mut fields);
         for (key, _) in entries {
             if let Some(value) = fields.remove(&key) {
                 map.insert(key, value);
@@ -96,7 +97,7 @@ macro_rules! walkers {
             use crate::security::{
                 OauthFlow, OauthFlows, SecurityRequirement, SecurityScheme, SecurityType,
             };
-            use crate::visit::ComponentKind;
+            use crate::visit::{ComponentKind, ExtrasOwner};
             use crate::{
                 Any, Callback, Components, Contact, Encoding, Example, ExternalDocumentation, Header,
                 Info, License, Link, MediaType, OpenAPIV3, Operation, Parameter, PathItem,
@@ -121,7 +122,7 @@ macro_rules! walkers {
                     extras,
                 } = document;
                 if let Some(extras) = extras {
-                    visit.extensions(extras);
+                    visit.extensions(ExtrasOwner::Object, extras);
                 }
                 info_node(visit, info);
                 if let Some(values) = servers {
@@ -129,7 +130,7 @@ macro_rules! walkers {
                         server_node(visit, server);
                     }
                 }
-                visit.extensions(& $($mutability)? paths.extras);
+                visit.extensions(ExtrasOwner::Object, & $($mutability)? paths.extras);
                 for (_, item) in paths {
                     path_item(visit, item);
                 }
@@ -165,7 +166,7 @@ macro_rules! walkers {
                     version: _,
                     extras,
                 } = info;
-                visit.extensions(extras);
+                visit.extensions(ExtrasOwner::Object, extras);
                 if let Some(contact) = contact {
                     contact_node(visit, contact);
                 }
@@ -184,7 +185,7 @@ macro_rules! walkers {
                     email: _,
                     extras,
                 } = contact;
-                visit.extensions(extras);
+                visit.extensions(ExtrasOwner::Object, extras);
             }
 
             fn license_node<V: crate::visit::$visitor + ?Sized>(
@@ -196,7 +197,7 @@ macro_rules! walkers {
                     url: _,
                     extras,
                 } = license;
-                visit.extensions(extras);
+                visit.extensions(ExtrasOwner::Object, extras);
             }
 
             fn server_node<V: crate::visit::$visitor + ?Sized>(
@@ -209,7 +210,7 @@ macro_rules! walkers {
                     variables,
                     extras,
                 } = server;
-                visit.extensions(extras);
+                visit.extensions(ExtrasOwner::Object, extras);
                 if let Some(map) = variables {
                     for (_, variable) in map {
                         server_variable_node(visit, variable);
@@ -227,7 +228,7 @@ macro_rules! walkers {
                     description: _,
                     extras,
                 } = variable;
-                visit.extensions(extras);
+                visit.extensions(ExtrasOwner::Object, extras);
             }
 
             pub(crate) fn components_node<V: crate::visit::$visitor + ?Sized>(
@@ -247,7 +248,7 @@ macro_rules! walkers {
                     path_items,
                     extras,
                 } = components;
-                visit.extensions(extras);
+                visit.extensions(ExtrasOwner::Object, extras);
                 if let Some(map) = schemas {
                     for (_, value) in map {
                         schema_value(visit, value);
@@ -339,7 +340,7 @@ macro_rules! walkers {
                     parameters,
                     extras,
                 } = item;
-                visit.extensions(extras);
+                visit.extensions(ExtrasOwner::Object, extras);
                 if let Some(target) = _ref {
                     visit.reference(crate::visit::$site {
                         kind: ComponentKind::PathItems,
@@ -390,7 +391,7 @@ macro_rules! walkers {
                     servers,
                     extras,
                 } = operation;
-                visit.extensions(extras);
+                visit.extensions(ExtrasOwner::Object, extras);
                 if let Some(docs) = external_docs {
                     external_docs_node(visit, docs);
                 }
@@ -434,7 +435,7 @@ macro_rules! walkers {
                     url: _,
                     extras,
                 } = docs;
-                visit.extensions(extras);
+                visit.extensions(ExtrasOwner::Object, extras);
             }
 
             pub(crate) fn parameter_node<V: crate::visit::$visitor + ?Sized>(
@@ -457,7 +458,7 @@ macro_rules! walkers {
                     content,
                     extras,
                 } = parameter;
-                visit.extensions(extras);
+                visit.extensions(ExtrasOwner::Object, extras);
                 if let Some(schema) = schema {
                     schema_value(visit, schema);
                 }
@@ -485,7 +486,7 @@ macro_rules! walkers {
                     content,
                     extras,
                 } = body;
-                visit.extensions(extras);
+                visit.extensions(ExtrasOwner::Object, extras);
                 for (_, media) in content {
                     media_node(visit, media);
                 }
@@ -503,7 +504,7 @@ macro_rules! walkers {
                     encoding,
                     extras,
                 } = media;
-                visit.extensions(extras);
+                visit.extensions(ExtrasOwner::Object, extras);
                 if let Some(schema) = schema {
                     schema_value(visit, schema);
                 }
@@ -536,7 +537,7 @@ macro_rules! walkers {
                     allow_reserved: _,
                     extras,
                 } = encoding;
-                visit.extensions(extras);
+                visit.extensions(ExtrasOwner::Object, extras);
                 if let Some(map) = headers {
                     for (_, header) in map {
                         referenceable(visit, header, ComponentKind::Headers, |data, visit| {
@@ -555,7 +556,7 @@ macro_rules! walkers {
                     data,
                     extras,
                 } = responses;
-                visit.extensions(extras);
+                visit.extensions(ExtrasOwner::Object, extras);
                 if let Some(response) = default {
                     referenceable(visit, response, ComponentKind::Responses, |data, visit| {
                         response_node(visit, data)
@@ -579,7 +580,7 @@ macro_rules! walkers {
                     links,
                     extras,
                 } = response;
-                visit.extensions(extras);
+                visit.extensions(ExtrasOwner::Object, extras);
                 if let Some(map) = headers {
                     for (_, header) in map {
                         referenceable(visit, header, ComponentKind::Headers, |data, visit| {
@@ -611,7 +612,7 @@ macro_rules! walkers {
                     data,
                     extras,
                 } = callback;
-                visit.extensions(extras);
+                visit.extensions(ExtrasOwner::Object, extras);
                 #[cfg(feature = "lossless-schema-keywords")]
                 if let crate::lossless_component::Field::Value(target) = reference {
                     visit.reference(crate::visit::$site {
@@ -638,7 +639,7 @@ macro_rules! walkers {
                     external_value: _,
                     extras,
                 } = example;
-                visit.extensions(extras);
+                visit.extensions(ExtrasOwner::Object, extras);
             }
 
             pub(crate) fn link_node<V: crate::visit::$visitor + ?Sized>(
@@ -654,7 +655,7 @@ macro_rules! walkers {
                     server,
                     extras,
                 } = link;
-                visit.extensions(extras);
+                visit.extensions(ExtrasOwner::Object, extras);
                 if let Some(target) = operation_ref {
                     if target.starts_with("#/components/pathItems/") {
                         visit.reference(crate::visit::$site {
@@ -689,7 +690,7 @@ macro_rules! walkers {
                     content,
                     extras,
                 } = header;
-                visit.extensions(extras);
+                visit.extensions(ExtrasOwner::Object, extras);
                 if let Some(schema) = schema {
                     schema_value(visit, schema);
                 }
@@ -717,7 +718,7 @@ macro_rules! walkers {
                     external_docs,
                     extras,
                 } = tag;
-                visit.extensions(extras);
+                visit.extensions(ExtrasOwner::Object, extras);
                 if let Some(docs) = external_docs {
                     external_docs_node(visit, docs);
                 }
@@ -732,7 +733,7 @@ macro_rules! walkers {
                     description: _,
                     extras,
                 } = scheme;
-                visit.extensions(extras);
+                visit.extensions(ExtrasOwner::Object, extras);
                 match _type {
                     SecurityType::ApiKey { name: _, _in: _ } => {}
                     SecurityType::Http {
@@ -757,7 +758,7 @@ macro_rules! walkers {
                     authorization_code,
                     extras,
                 } = flows;
-                visit.extensions(extras);
+                visit.extensions(ExtrasOwner::Object, extras);
                 for flow in [
                     implicit,
                     password,
@@ -782,7 +783,7 @@ macro_rules! walkers {
                     scopes: _,
                     extras,
                 } = flow;
-                visit.extensions(extras);
+                visit.extensions(ExtrasOwner::Object, extras);
             }
 
             fn security_requirements<V: crate::visit::$visitor + ?Sized>(
@@ -810,7 +811,7 @@ macro_rules! walkers {
                             description: _,
                             extras,
                         } = reference;
-                        visit.extensions(extras);
+                        visit.extensions(ExtrasOwner::Object, extras);
                         visit.reference(crate::visit::$site {
                             kind,
                             target: _ref,
@@ -840,11 +841,11 @@ macro_rules! walkers {
                 schema: & $($mutability)? Schema,
             ) {
                 visit.schema(schema);
-                visit.extensions(& $($mutability)? schema.extras);
+                visit.extensions(ExtrasOwner::Schema, & $($mutability)? schema.extras);
                 super::$nested(visit, schema);
                 #[cfg(feature = "lossless-schema-keywords")]
                 if let Some(docs) = & $($mutability)? schema.external_docs {
-                    visit.extensions(& $($mutability)? docs.extras);
+                    visit.extensions(ExtrasOwner::Object, & $($mutability)? docs.extras);
                 }
                 if let Some(target) = & $($mutability)? schema._ref {
                     visit.reference(crate::visit::$site {
@@ -886,7 +887,7 @@ macro_rules! walkers {
                             mapping,
                             extras,
                         } = discriminator;
-                        visit.extensions(extras);
+                        visit.extensions(ExtrasOwner::Object, extras);
                         if let crate::lossless_component::Field::Value(mapping) = mapping {
                             for (_, field) in mapping {
                                 if let crate::lossless_component::Field::Value(target) = field {

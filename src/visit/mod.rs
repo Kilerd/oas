@@ -13,6 +13,13 @@
 //! string is reported with [`RefSite::dynamic`] set; [`RefGraph`] resolves any
 //! such site to [`RefError::Dynamic`] instead of following it.
 //!
+//! Each unmodeled map arrives with an [`ExtrasOwner`]: [`ExtrasOwner::Schema`]
+//! for a Schema Object's own keywords, where literal payload keywords such as
+//! `example` and `default` are data, and [`ExtrasOwner::Object`] for every
+//! other OpenAPI object, where only `x-*` keys are extensions. The `xml`,
+//! `discriminator` and `externalDocs` objects nested in a schema are OpenAPI
+//! sub-objects, so their maps use `Object`.
+//!
 //! ## Positions that are not walked
 //!
 //! The strict model does not type these OpenAPI 3.2 positions, so they sit in
@@ -431,6 +438,26 @@ pub struct RefSiteMut<'a> {
     pub operation_ref: bool,
 }
 
+/// The kind of object whose unmodeled map a visitor receives.
+///
+/// The two owners follow different rules. A [`ExtrasOwner::Schema`] map holds
+/// JSON Schema keywords: unknown keys are keywords, and `example`, `examples`,
+/// `default`, `enum` and `const` hold literal data. An
+/// [`ExtrasOwner::Object`] map belongs to another OpenAPI object, where only
+/// `x-*` keys are extensions and any other key is invalid content.
+///
+/// The `xml`, `discriminator` and `externalDocs` value objects nested in a
+/// Schema Object are OpenAPI sub-objects, not schemas, so their maps are
+/// reported as [`ExtrasOwner::Object`].
+#[non_exhaustive]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum ExtrasOwner {
+    /// A Schema Object's own unmodeled keywords.
+    Schema,
+    /// Any other OpenAPI object's unmodeled fields.
+    Object,
+}
+
 /// Read-only visitor over the strict model. Every method does nothing by
 /// default.
 pub trait Visit {
@@ -438,8 +465,9 @@ pub trait Visit {
     fn reference(&mut self, _site: RefSite<'_>) {}
     /// A Schema Object, parents before children.
     fn schema(&mut self, _schema: &Schema) {}
-    /// The unmodeled and `x-*` keys of one object.
-    fn extensions(&mut self, _extensions: &BTreeMap<String, Any>) {}
+    /// The unmodeled and `x-*` keys of one object, with the rule that applies
+    /// to them.
+    fn extensions(&mut self, _owner: ExtrasOwner, _extensions: &BTreeMap<String, Any>) {}
     /// One security requirement, whose keys name `securitySchemes`
     /// components.
     fn security_requirement(&mut self, _requirement: &crate::SecurityRequirement) {}
@@ -451,8 +479,9 @@ pub trait VisitMut {
     fn reference(&mut self, _site: RefSiteMut<'_>) {}
     /// A Schema Object, parents before children.
     fn schema(&mut self, _schema: &mut Schema) {}
-    /// The unmodeled and `x-*` keys of one object.
-    fn extensions(&mut self, _extensions: &mut BTreeMap<String, Any>) {}
+    /// The unmodeled and `x-*` keys of one object, with the rule that applies
+    /// to them.
+    fn extensions(&mut self, _owner: ExtrasOwner, _extensions: &mut BTreeMap<String, Any>) {}
     /// One security requirement, whose keys name `securitySchemes`
     /// components. Rebuilding `requirement.data` makes a rename collision
     /// explicit; the default leaves it unchanged.
