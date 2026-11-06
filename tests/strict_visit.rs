@@ -1319,3 +1319,36 @@ fn operation_ref_edges_resolve_to_the_path_item() {
     assert!(roots.contains(&key(ComponentKind::PathItems, "P")));
     assert!(roots.contains(&key(ComponentKind::Responses, "R")));
 }
+
+#[test]
+fn constant_callback_expressions_tolerate_non_object_values() {
+    let doc: OpenAPIV3 = serde_json::from_value(json!({
+        "openapi": "3.1.0",
+        "info": {"title": "t", "version": "1"},
+        "paths": {"/x": {"get": {"callbacks": {"c": {
+            "note": "hello",
+            "https://example.test/hook": 7,
+            "/ok": {"get": {"responses": {"200": {"$ref": "#/components/responses/Ok"}}}}
+        }}, "responses": {"200": {"description": "ok"}}}}},
+        "components": {"responses": {"Ok": {"description": "ok"}}}
+    }))
+    .expect("a non-object callback expression must not reject the document");
+    let callback = doc.paths["/x"]
+        .get
+        .as_ref()
+        .unwrap()
+        .callbacks
+        .as_ref()
+        .unwrap()["c"]
+        .as_data()
+        .expect("the callback is inline");
+    assert_eq!(callback.extras["note"], json!("hello"));
+    assert_eq!(callback.extras["https://example.test/hook"], json!(7));
+    assert!(callback.data.contains_key("/ok"));
+    let found = references(&doc);
+    assert!(found
+        .iter()
+        .any(|(kind, target, _)| *kind == ComponentKind::Responses
+            && target == "#/components/responses/Ok"));
+    assert!(!found.iter().any(|(_, target, _)| target == "hello"));
+}

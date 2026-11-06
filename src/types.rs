@@ -838,9 +838,14 @@ impl<'de> Deserialize<'de> for Callback {
                 continue;
             }
             // Reference Object annotations stay with the reference; every
-            // other non-extension key is a callback expression, including a
-            // constant URL without braces. Extensions remain opaque.
-            if matches!(key.as_str(), "summary" | "description") || key.starts_with("x-") {
+            // other non-extension object is a callback expression, including a
+            // constant URL without braces. Extensions and non-object values
+            // remain opaque in extras, so one malformed entry does not reject
+            // the whole document.
+            if matches!(key.as_str(), "summary" | "description")
+                || key.starts_with("x-")
+                || !value.is_object()
+            {
                 callback.extras.insert(key, value);
             } else {
                 callback.data.insert(
