@@ -83,13 +83,9 @@ macro_rules! walkers {
         $visitor:ident,
         $site:ident,
         [$($mutability:tt)?],
-        $iter:ident,
-        $values:ident,
-        $as_deref:ident,
-        $as_ref:ident,
         $get:ident,
         $as_object:ident,
-        $field_as:ident,
+        $as_ref:ident,
         $child:ident,
         $dynamic:ident,
         $nested:ident $(,)?
@@ -100,7 +96,7 @@ macro_rules! walkers {
             use crate::security::{
                 OauthFlow, OauthFlows, SecurityRequirement, SecurityScheme, SecurityType,
             };
-            use crate::visit::{ComponentKind, ComponentRef};
+            use crate::visit::ComponentKind;
             use crate::{
                 Any, Callback, Components, Contact, Encoding, Example, ExternalDocumentation, Header,
                 Info, License, Link, MediaType, OpenAPIV3, Operation, Parameter, PathItem,
@@ -128,8 +124,10 @@ macro_rules! walkers {
                     visit.extensions(extras);
                 }
                 info_node(visit, info);
-                for server in servers.$iter().flatten() {
-                    server_node(visit, server);
+                if let Some(values) = servers {
+                    for server in values {
+                        server_node(visit, server);
+                    }
                 }
                 visit.extensions(& $($mutability)? paths.extras);
                 for (_, item) in paths {
@@ -144,8 +142,10 @@ macro_rules! walkers {
                     components_node(visit, components);
                 }
                 security_requirements(visit, security);
-                for tag in tags.$iter().flatten() {
-                    tag_node(visit, tag);
+                if let Some(values) = tags {
+                    for tag in values {
+                        tag_node(visit, tag);
+                    }
                 }
                 if let Some(docs) = external_docs {
                     external_docs_node(visit, docs);
@@ -210,8 +210,10 @@ macro_rules! walkers {
                     extras,
                 } = server;
                 visit.extensions(extras);
-                for variable in variables.$iter().flat_map(|map| map.$values()) {
-                    server_variable_node(visit, variable);
+                if let Some(map) = variables {
+                    for (_, variable) in map {
+                        server_variable_node(visit, variable);
+                    }
                 }
             }
 
@@ -246,168 +248,73 @@ macro_rules! walkers {
                     extras,
                 } = components;
                 visit.extensions(extras);
-                for value in schemas.$iter().flat_map(|map| map.$values()) {
-                    schema_value(visit, value);
-                }
-                for node in responses.$iter().flat_map(|map| map.$values()) {
-                    referenceable(visit, node, ComponentKind::Responses, |data, visit| {
-                        response_node(visit, data)
-                    });
-                }
-                for node in parameters.$iter().flat_map(|map| map.$values()) {
-                    referenceable(visit, node, ComponentKind::Parameters, |data, visit| {
-                        parameter_node(visit, data)
-                    });
-                }
-                for node in examples.$iter().flat_map(|map| map.$values()) {
-                    referenceable(visit, node, ComponentKind::Examples, |data, visit| {
-                        example_node(visit, data)
-                    });
-                }
-                for node in request_bodies.$iter().flat_map(|map| map.$values()) {
-                    referenceable(visit, node, ComponentKind::RequestBodies, |data, visit| {
-                        request_body_node(visit, data)
-                    });
-                }
-                for node in headers.$iter().flat_map(|map| map.$values()) {
-                    referenceable(visit, node, ComponentKind::Headers, |data, visit| {
-                        header_node(visit, data)
-                    });
-                }
-                for node in security_schemes.$iter().flat_map(|map| map.$values()) {
-                    referenceable(
-                        visit,
-                        node,
-                        ComponentKind::SecuritySchemes,
-                        |data, visit| security_scheme_node(visit, data),
-                    );
-                }
-                for node in links.$iter().flat_map(|map| map.$values()) {
-                    referenceable(visit, node, ComponentKind::Links, |data, visit| {
-                        link_node(visit, data)
-                    });
-                }
-                for node in callbacks.$iter().flat_map(|map| map.$values()) {
-                    referenceable(visit, node, ComponentKind::Callbacks, |data, visit| {
-                        callback_node(visit, data)
-                    });
-                }
-                for item in path_items.$iter().flat_map(|map| map.$values()) {
-                    path_item(visit, item);
-                }
-            }
-
-            pub(crate) fn component<V: crate::visit::$visitor + ?Sized>(
-                components: & $($mutability)? Components,
-                component: &ComponentRef,
-                visit: &mut V,
-            ) {
-                match component.kind {
-                    ComponentKind::Schemas => {
-                        if let Some(value) = components
-                            .schemas
-                            .$as_ref()
-                            .and_then(|group| group.$get(&component.name))
-                        {
-                            schema_value(visit, value);
-                        }
+                if let Some(map) = schemas {
+                    for (_, value) in map {
+                        schema_value(visit, value);
                     }
-                    ComponentKind::Responses => {
-                        if let Some(value) = components
-                            .responses
-                            .$as_ref()
-                            .and_then(|group| group.$get(&component.name))
-                        {
-                            referenceable(visit, value, component.kind, |data, visit| {
-                                response_node(visit, data)
-                            });
-                        }
+                }
+                if let Some(map) = responses {
+                    for (_, node) in map {
+                        referenceable(visit, node, ComponentKind::Responses, |data, visit| {
+                            response_node(visit, data)
+                        });
                     }
-                    ComponentKind::Parameters => {
-                        if let Some(value) = components
-                            .parameters
-                            .$as_ref()
-                            .and_then(|group| group.$get(&component.name))
-                        {
-                            referenceable(visit, value, component.kind, |data, visit| {
-                                parameter_node(visit, data)
-                            });
-                        }
+                }
+                if let Some(map) = parameters {
+                    for (_, node) in map {
+                        referenceable(visit, node, ComponentKind::Parameters, |data, visit| {
+                            parameter_node(visit, data)
+                        });
                     }
-                    ComponentKind::Examples => {
-                        if let Some(value) = components
-                            .examples
-                            .$as_ref()
-                            .and_then(|group| group.$get(&component.name))
-                        {
-                            referenceable(visit, value, component.kind, |data, visit| {
-                                example_node(visit, data)
-                            });
-                        }
+                }
+                if let Some(map) = examples {
+                    for (_, node) in map {
+                        referenceable(visit, node, ComponentKind::Examples, |data, visit| {
+                            example_node(visit, data)
+                        });
                     }
-                    ComponentKind::RequestBodies => {
-                        if let Some(value) = components
-                            .request_bodies
-                            .$as_ref()
-                            .and_then(|group| group.$get(&component.name))
-                        {
-                            referenceable(visit, value, component.kind, |data, visit| {
-                                request_body_node(visit, data)
-                            });
-                        }
+                }
+                if let Some(map) = request_bodies {
+                    for (_, node) in map {
+                        referenceable(visit, node, ComponentKind::RequestBodies, |data, visit| {
+                            request_body_node(visit, data)
+                        });
                     }
-                    ComponentKind::Headers => {
-                        if let Some(value) = components
-                            .headers
-                            .$as_ref()
-                            .and_then(|group| group.$get(&component.name))
-                        {
-                            referenceable(visit, value, component.kind, |data, visit| {
-                                header_node(visit, data)
-                            });
-                        }
+                }
+                if let Some(map) = headers {
+                    for (_, node) in map {
+                        referenceable(visit, node, ComponentKind::Headers, |data, visit| {
+                            header_node(visit, data)
+                        });
                     }
-                    ComponentKind::SecuritySchemes => {
-                        if let Some(value) = components
-                            .security_schemes
-                            .$as_ref()
-                            .and_then(|group| group.$get(&component.name))
-                        {
-                            referenceable(visit, value, component.kind, |data, visit| {
-                                security_scheme_node(visit, data)
-                            });
-                        }
+                }
+                if let Some(map) = security_schemes {
+                    for (_, node) in map {
+                        referenceable(
+                            visit,
+                            node,
+                            ComponentKind::SecuritySchemes,
+                            |data, visit| security_scheme_node(visit, data),
+                        );
                     }
-                    ComponentKind::Links => {
-                        if let Some(value) = components
-                            .links
-                            .$as_ref()
-                            .and_then(|group| group.$get(&component.name))
-                        {
-                            referenceable(visit, value, component.kind, |data, visit| {
-                                link_node(visit, data)
-                            });
-                        }
+                }
+                if let Some(map) = links {
+                    for (_, node) in map {
+                        referenceable(visit, node, ComponentKind::Links, |data, visit| {
+                            link_node(visit, data)
+                        });
                     }
-                    ComponentKind::Callbacks => {
-                        if let Some(value) = components
-                            .callbacks
-                            .$as_ref()
-                            .and_then(|group| group.$get(&component.name))
-                        {
-                            referenceable(visit, value, component.kind, |data, visit| {
-                                callback_node(visit, data)
-                            });
-                        }
+                }
+                if let Some(map) = callbacks {
+                    for (_, node) in map {
+                        referenceable(visit, node, ComponentKind::Callbacks, |data, visit| {
+                            callback_node(visit, data)
+                        });
                     }
-                    ComponentKind::PathItems => {
-                        if let Some(value) = components
-                            .path_items
-                            .$as_ref()
-                            .and_then(|group| group.$get(&component.name))
-                        {
-                            path_item(visit, value);
-                        }
+                }
+                if let Some(map) = path_items {
+                    for (_, item) in map {
+                        path_item(visit, item);
                     }
                 }
             }
@@ -433,7 +340,7 @@ macro_rules! walkers {
                     extras,
                 } = item;
                 visit.extensions(extras);
-                if let Some(target) = _ref.$as_ref() {
+                if let Some(target) = _ref {
                     visit.reference(crate::visit::$site {
                         kind: ComponentKind::PathItems,
                         target,
@@ -441,22 +348,25 @@ macro_rules! walkers {
                         mapping: false,
                     });
                 }
-                for op in [get, put, post, delete, options, head, patch, trace]
-                    .into_iter()
-                    .filter_map(|operation| operation.$as_deref())
-                {
-                    operation(visit, op);
+                for op in [get, put, post, delete, options, head, patch, trace] {
+                    if let Some(op) = op {
+                        operation(visit, op);
+                    }
                 }
-                for server in servers.$iter().flatten() {
-                    server_node(visit, server);
+                if let Some(values) = servers {
+                    for server in values {
+                        server_node(visit, server);
+                    }
                 }
-                for parameter in parameters.$iter().flatten() {
-                    referenceable(
-                        visit,
-                        parameter,
-                        ComponentKind::Parameters,
-                        |data, visit| parameter_node(visit, data),
-                    );
+                if let Some(values) = parameters {
+                    for parameter in values {
+                        referenceable(
+                            visit,
+                            parameter,
+                            ComponentKind::Parameters,
+                            |data, visit| parameter_node(visit, data),
+                        );
+                    }
                 }
             }
 
@@ -483,13 +393,15 @@ macro_rules! walkers {
                 if let Some(docs) = external_docs {
                     external_docs_node(visit, docs);
                 }
-                for parameter in parameters.$iter().flatten() {
-                    referenceable(
-                        visit,
-                        parameter,
-                        ComponentKind::Parameters,
-                        |data, visit| parameter_node(visit, data),
-                    );
+                if let Some(values) = parameters {
+                    for parameter in values {
+                        referenceable(
+                            visit,
+                            parameter,
+                            ComponentKind::Parameters,
+                            |data, visit| parameter_node(visit, data),
+                        );
+                    }
                 }
                 if let Some(body) = request_body {
                     referenceable(visit, body, ComponentKind::RequestBodies, |data, visit| {
@@ -497,14 +409,18 @@ macro_rules! walkers {
                     });
                 }
                 responses_node(visit, responses);
-                for callback in callbacks.$iter().flat_map(|map| map.$values()) {
-                    referenceable(visit, callback, ComponentKind::Callbacks, |data, visit| {
-                        callback_node(visit, data)
-                    });
+                if let Some(map) = callbacks {
+                    for (_, callback) in map {
+                        referenceable(visit, callback, ComponentKind::Callbacks, |data, visit| {
+                            callback_node(visit, data)
+                        });
+                    }
                 }
                 security_requirements(visit, security);
-                for server in servers.$iter().flatten() {
-                    server_node(visit, server);
+                if let Some(values) = servers {
+                    for server in values {
+                        server_node(visit, server);
+                    }
                 }
             }
 
@@ -520,7 +436,7 @@ macro_rules! walkers {
                 visit.extensions(extras);
             }
 
-            fn parameter_node<V: crate::visit::$visitor + ?Sized>(
+            pub(crate) fn parameter_node<V: crate::visit::$visitor + ?Sized>(
                 visit: &mut V,
                 parameter: & $($mutability)? Parameter,
             ) {
@@ -544,17 +460,21 @@ macro_rules! walkers {
                 if let Some(schema) = schema {
                     schema_value(visit, schema);
                 }
-                for example in examples.$iter().flat_map(|map| map.$values()) {
-                    referenceable(visit, example, ComponentKind::Examples, |data, visit| {
-                        example_node(visit, data)
-                    });
+                if let Some(map) = examples {
+                    for (_, example) in map {
+                        referenceable(visit, example, ComponentKind::Examples, |data, visit| {
+                            example_node(visit, data)
+                        });
+                    }
                 }
-                for media in content.$iter().flat_map(|map| map.$values()) {
-                    media_node(visit, media);
+                if let Some(map) = content {
+                    for (_, media) in map {
+                        media_node(visit, media);
+                    }
                 }
             }
 
-            fn request_body_node<V: crate::visit::$visitor + ?Sized>(
+            pub(crate) fn request_body_node<V: crate::visit::$visitor + ?Sized>(
                 visit: &mut V,
                 body: & $($mutability)? RequestBody,
             ) {
@@ -565,7 +485,7 @@ macro_rules! walkers {
                     extras,
                 } = body;
                 visit.extensions(extras);
-                for media in content.$values() {
+                for (_, media) in content {
                     media_node(visit, media);
                 }
             }
@@ -583,16 +503,23 @@ macro_rules! walkers {
                     extras,
                 } = media;
                 visit.extensions(extras);
-                for schema in schema.$iter().chain(item_schema.$iter()) {
+                if let Some(schema) = schema {
                     schema_value(visit, schema);
                 }
-                for example in examples.$iter().flat_map(|map| map.$values()) {
-                    referenceable(visit, example, ComponentKind::Examples, |data, visit| {
-                        example_node(visit, data)
-                    });
+                if let Some(item_schema) = item_schema {
+                    schema_value(visit, item_schema);
                 }
-                for encoding in encoding.$iter().flat_map(|map| map.$values()) {
-                    encoding_node(visit, encoding);
+                if let Some(map) = examples {
+                    for (_, example) in map {
+                        referenceable(visit, example, ComponentKind::Examples, |data, visit| {
+                            example_node(visit, data)
+                        });
+                    }
+                }
+                if let Some(map) = encoding {
+                    for (_, encoding) in map {
+                        encoding_node(visit, encoding);
+                    }
                 }
             }
 
@@ -609,10 +536,12 @@ macro_rules! walkers {
                     extras,
                 } = encoding;
                 visit.extensions(extras);
-                for header in headers.$iter().flat_map(|map| map.$values()) {
-                    referenceable(visit, header, ComponentKind::Headers, |data, visit| {
-                        header_node(visit, data)
-                    });
+                if let Some(map) = headers {
+                    for (_, header) in map {
+                        referenceable(visit, header, ComponentKind::Headers, |data, visit| {
+                            header_node(visit, data)
+                        });
+                    }
                 }
             }
 
@@ -631,14 +560,14 @@ macro_rules! walkers {
                         response_node(visit, data)
                     });
                 }
-                for response in data.$values() {
+                for (_, response) in data {
                     referenceable(visit, response, ComponentKind::Responses, |data, visit| {
                         response_node(visit, data)
                     });
                 }
             }
 
-            fn response_node<V: crate::visit::$visitor + ?Sized>(
+            pub(crate) fn response_node<V: crate::visit::$visitor + ?Sized>(
                 visit: &mut V,
                 response: & $($mutability)? Response,
             ) {
@@ -650,39 +579,37 @@ macro_rules! walkers {
                     extras,
                 } = response;
                 visit.extensions(extras);
-                for header in headers.$iter().flat_map(|map| map.$values()) {
-                    referenceable(visit, header, ComponentKind::Headers, |data, visit| {
-                        header_node(visit, data)
-                    });
+                if let Some(map) = headers {
+                    for (_, header) in map {
+                        referenceable(visit, header, ComponentKind::Headers, |data, visit| {
+                            header_node(visit, data)
+                        });
+                    }
                 }
-                for media in content.$iter().flat_map(|map| map.$values()) {
-                    media_node(visit, media);
+                if let Some(map) = content {
+                    for (_, media) in map {
+                        media_node(visit, media);
+                    }
                 }
-                for link in links.$iter().flat_map(|map| map.$values()) {
-                    referenceable(visit, link, ComponentKind::Links, |data, visit| {
-                        link_node(visit, data)
-                    });
+                if let Some(map) = links {
+                    for (_, link) in map {
+                        referenceable(visit, link, ComponentKind::Links, |data, visit| {
+                            link_node(visit, data)
+                        });
+                    }
                 }
             }
 
-            fn callback_node<V: crate::visit::$visitor + ?Sized>(
+            pub(crate) fn callback_node<V: crate::visit::$visitor + ?Sized>(
                 visit: &mut V,
                 callback: & $($mutability)? Callback,
             ) {
-                #[cfg(feature = "lossless-schema-keywords")]
-                let (reference, data, extras) = {
-                    let Callback {
-                        reference,
-                        data,
-                        extras,
-                    } = callback;
-                    (reference, data, extras)
-                };
-                #[cfg(not(feature = "lossless-schema-keywords"))]
-                let (data, extras) = {
-                    let Callback { data, extras } = callback;
-                    (data, extras)
-                };
+                let Callback {
+                    #[cfg(feature = "lossless-schema-keywords")]
+                    reference,
+                    data,
+                    extras,
+                } = callback;
                 visit.extensions(extras);
                 #[cfg(feature = "lossless-schema-keywords")]
                 if let crate::lossless_component::Field::Value(target) = reference {
@@ -693,12 +620,12 @@ macro_rules! walkers {
                         mapping: false,
                     });
                 }
-                for item in data.$values() {
+                for (_, item) in data {
                     path_item(visit, item);
                 }
             }
 
-            fn example_node<V: crate::visit::$visitor + ?Sized>(
+            pub(crate) fn example_node<V: crate::visit::$visitor + ?Sized>(
                 visit: &mut V,
                 example: & $($mutability)? Example,
             ) {
@@ -712,7 +639,7 @@ macro_rules! walkers {
                 visit.extensions(extras);
             }
 
-            fn link_node<V: crate::visit::$visitor + ?Sized>(
+            pub(crate) fn link_node<V: crate::visit::$visitor + ?Sized>(
                 visit: &mut V,
                 link: & $($mutability)? Link,
             ) {
@@ -741,7 +668,7 @@ macro_rules! walkers {
                 }
             }
 
-            fn header_node<V: crate::visit::$visitor + ?Sized>(
+            pub(crate) fn header_node<V: crate::visit::$visitor + ?Sized>(
                 visit: &mut V,
                 header: & $($mutability)? Header,
             ) {
@@ -763,13 +690,17 @@ macro_rules! walkers {
                 if let Some(schema) = schema {
                     schema_value(visit, schema);
                 }
-                for example in examples.$iter().flat_map(|map| map.$values()) {
-                    referenceable(visit, example, ComponentKind::Examples, |data, visit| {
-                        example_node(visit, data)
-                    });
+                if let Some(map) = examples {
+                    for (_, example) in map {
+                        referenceable(visit, example, ComponentKind::Examples, |data, visit| {
+                            example_node(visit, data)
+                        });
+                    }
                 }
-                for media in content.$iter().flat_map(|map| map.$values()) {
-                    media_node(visit, media);
+                if let Some(map) = content {
+                    for (_, media) in map {
+                        media_node(visit, media);
+                    }
                 }
             }
 
@@ -789,7 +720,7 @@ macro_rules! walkers {
                 }
             }
 
-            fn security_scheme_node<V: crate::visit::$visitor + ?Sized>(
+            pub(crate) fn security_scheme_node<V: crate::visit::$visitor + ?Sized>(
                 visit: &mut V,
                 scheme: & $($mutability)? SecurityScheme,
             ) {
@@ -862,7 +793,7 @@ macro_rules! walkers {
                 }
             }
 
-            fn referenceable<T, V: crate::visit::$visitor + ?Sized>(
+            pub(crate) fn referenceable<T, V: crate::visit::$visitor + ?Sized>(
                 visit: &mut V,
                 node: & $($mutability)? Referenceable<T>,
                 kind: ComponentKind,
@@ -908,10 +839,10 @@ macro_rules! walkers {
                 visit.extensions(& $($mutability)? schema.extras);
                 super::$nested(visit, schema);
                 #[cfg(feature = "lossless-schema-keywords")]
-                if let Some(docs) = schema.external_docs.$as_ref() {
+                if let Some(docs) = & $($mutability)? schema.external_docs {
                     visit.extensions(& $($mutability)? docs.extras);
                 }
-                if let Some(target) = schema._ref.$as_ref() {
+                if let Some(target) = & $($mutability)? schema._ref {
                     visit.reference(crate::visit::$site {
                         kind: ComponentKind::Schemas,
                         target,
@@ -943,15 +874,15 @@ macro_rules! walkers {
             ) {
                 #[cfg(feature = "lossless-schema-keywords")]
                 {
-                    if let Some(discriminator) = schema.discriminator.$as_ref() {
+                    if let Some(discriminator) = & $($mutability)? schema.discriminator {
                         let crate::lossless_component::Discriminator {
                             property_name: _,
                             mapping,
                             extras,
                         } = discriminator;
                         visit.extensions(extras);
-                        if let Some(mapping) = mapping.$field_as() {
-                            for field in mapping.$values() {
+                        if let crate::lossless_component::Field::Value(mapping) = mapping {
+                            for (_, field) in mapping {
                                 if let crate::lossless_component::Field::Value(target) = field {
                                     visit.reference(crate::visit::$site {
                                         kind: ComponentKind::Schemas,
@@ -972,7 +903,7 @@ macro_rules! walkers {
                     .and_then(|discriminator| discriminator.$get("mapping"))
                     .and_then(Any::$as_object)
                 {
-                    for value in mapping.$values() {
+                    for (_, value) in mapping {
                         if let Any::String(target) = value {
                             visit.reference(crate::visit::$site {
                                 kind: ComponentKind::Schemas,
@@ -988,39 +919,30 @@ macro_rules! walkers {
     };
 }
 
-// Read-only walker: immutable accessors, `Visit`, and a security helper that
-// keeps requirement keys.
+// Read-only walker: immutable JSON accessors, `Visit`, and the read helpers
+// for dynamic references and nested extension maps.
 walkers!(
     read,
     Visit,
     RefSite,
     [],
-    iter,
-    values,
-    as_deref,
-    as_ref,
     get,
     as_object,
-    as_value,
+    as_ref,
     try_for_each_child_with_keyword,
     read_dynamic,
     read_nested_extensions
 );
 
-// Mutable walker: mutable accessors, `VisitMut`, and a security helper whose
-// visitor may return a replacement key.
+// Mutable walker: mutable JSON accessors, `VisitMut`, and the write helpers.
 walkers!(
     write,
     VisitMut,
     RefSiteMut,
     [mut],
-    iter_mut,
-    values_mut,
-    as_deref_mut,
-    as_mut,
     get_mut,
     as_object_mut,
-    as_value_mut,
+    as_mut,
     try_for_each_child_mut_with_keyword,
     write_dynamic,
     write_nested_extensions

@@ -1,6 +1,8 @@
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 
-use super::{is_bare_name, Collect, ComponentKind, ComponentRef, DirectRef, RefError};
+use super::{
+    component_refs, is_bare_name, Collect, ComponentKind, ComponentRef, DirectRef, RefError,
+};
 use crate::Components;
 
 /// The component reference graph of one `components` object.
@@ -193,75 +195,4 @@ fn resolve(
         return Err(RefError::Missing(parsed));
     }
     Ok(parsed)
-}
-
-/// Every component name in `components`, in [`ComponentKind::ALL`] order.
-fn component_refs(components: &Components) -> Vec<ComponentRef> {
-    let mut refs = Vec::new();
-    for &kind in ComponentKind::ALL {
-        let names: Vec<String> = match kind {
-            ComponentKind::Schemas => components
-                .schemas
-                .iter()
-                .flat_map(BTreeMap::keys)
-                .cloned()
-                .collect(),
-            ComponentKind::Responses => components
-                .responses
-                .iter()
-                .flat_map(BTreeMap::keys)
-                .cloned()
-                .collect(),
-            ComponentKind::Parameters => components
-                .parameters
-                .iter()
-                .flat_map(BTreeMap::keys)
-                .cloned()
-                .collect(),
-            ComponentKind::Examples => components
-                .examples
-                .iter()
-                .flat_map(BTreeMap::keys)
-                .cloned()
-                .collect(),
-            ComponentKind::RequestBodies => components
-                .request_bodies
-                .iter()
-                .flat_map(BTreeMap::keys)
-                .cloned()
-                .collect(),
-            ComponentKind::Headers => components
-                .headers
-                .iter()
-                .flat_map(BTreeMap::keys)
-                .cloned()
-                .collect(),
-            ComponentKind::SecuritySchemes => components
-                .security_schemes
-                .iter()
-                .flat_map(BTreeMap::keys)
-                .cloned()
-                .collect(),
-            ComponentKind::Links => components
-                .links
-                .iter()
-                .flat_map(BTreeMap::keys)
-                .cloned()
-                .collect(),
-            ComponentKind::Callbacks => components
-                .callbacks
-                .iter()
-                .flat_map(BTreeMap::keys)
-                .cloned()
-                .collect(),
-            ComponentKind::PathItems => components
-                .path_items
-                .iter()
-                .flat_map(BTreeMap::keys)
-                .cloned()
-                .collect(),
-        };
-        refs.extend(names.into_iter().map(|name| ComponentRef::new(kind, name)));
-    }
-    refs
 }

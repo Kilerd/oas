@@ -726,7 +726,7 @@ fn webhooks_are_typed_and_walked() {
     assert!(
         doc.extras
             .as_ref()
-            .map_or(true, |extras| !extras.contains_key("webhooks")),
+            .is_none_or(|extras| !extras.contains_key("webhooks")),
         "webhooks must not stay in the root extension map"
     );
     assert_eq!(doc.webhooks.as_ref().unwrap().len(), 1);

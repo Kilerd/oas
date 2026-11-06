@@ -98,7 +98,9 @@
 //! let graph = doc.ref_graph();
 //! let roots = doc.paths["/x"].get.as_ref().unwrap().refs();
 //! let roots = graph.roots(roots).unwrap();
-//! assert_eq!(roots.len(), 1);
+//! assert_eq!(roots.len(), 2);
+//! assert!(roots.contains(&ComponentRef::new(ComponentKind::SecuritySchemes, "Bearer")));
+//! assert!(roots.contains(&ComponentRef::new(ComponentKind::Responses, "Ok")));
 //!
 //! let auth = ComponentRef::new(ComponentKind::SecuritySchemes, "Bearer");
 //! let ok = ComponentRef::new(ComponentKind::Responses, "Ok");
@@ -121,6 +123,98 @@ mod graph;
 mod walk;
 
 use walk::{read, write};
+
+/// One table of the ten component groups: kind, field, enum variant, and the
+/// walker that traverses the inline value (`node`) or the referenceable
+/// (`refable`). It drives `Components::get`, `insert_component`,
+/// `component_refs`, and the read/write component dispatch.
+macro_rules! component_kinds {
+    ($consumer:ident $(, $extra:ident)*) => {
+        $consumer! {
+            ($($extra),*)
+            ;
+            (Schemas, schemas, Schema, node, schema_value),
+            (PathItems, path_items, PathItem, node, path_item),
+            (Responses, responses, Response, refable, response_node),
+            (Parameters, parameters, Parameter, refable, parameter_node),
+            (Examples, examples, Example, refable, example_node),
+            (RequestBodies, request_bodies, RequestBody, refable, request_body_node),
+            (Headers, headers, Header, refable, header_node),
+            (SecuritySchemes, security_schemes, SecurityScheme, refable, security_scheme_node),
+            (Links, links, Link, refable, link_node),
+            (Callbacks, callbacks, Callback, refable, callback_node),
+        }
+    };
+}
+
+macro_rules! get_component {
+    (($components:ident, $component:ident); $(($kind:ident, $field:ident, $variant:ident, $rule:ident, $walk:ident),)*) => {
+        match $component.kind {
+            $(ComponentKind::$kind => $components
+                .$field
+                .as_ref()?
+                .get(&$component.name)
+                .map(ComponentValue::$variant),)*
+        }
+    };
+}
+
+macro_rules! insert_component {
+    (($components:ident, $target:ident, $value:ident); $(($kind:ident, $field:ident, $variant:ident, $rule:ident, $walk:ident),)*) => {
+        match $value {
+            $(ComponentValue::$variant(value) => {
+                $components
+                    .$field
+                    .get_or_insert_default()
+                    .insert($target.name.clone(), value.clone());
+            })*
+        }
+    };
+}
+
+macro_rules! refs_component {
+    (($components:ident, $refs:ident); $(($kind:ident, $field:ident, $variant:ident, $rule:ident, $walk:ident),)*) => {
+        $(
+            $refs.extend(
+                $components
+                    .$field
+                    .iter()
+                    .flat_map(BTreeMap::keys)
+                    .map(|name| ComponentRef::new(ComponentKind::$kind, name.clone())),
+            );
+        )*
+    };
+}
+
+macro_rules! walk_value {
+    ($module:ident, node, $walk:ident, $visit:ident, $value:ident, $kind:ident) => {
+        crate::visit::walk::$module::$walk($visit, $value)
+    };
+    ($module:ident, refable, $walk:ident, $visit:ident, $value:ident, $kind:ident) => {
+        crate::visit::walk::$module::referenceable(
+            $visit,
+            $value,
+            ComponentKind::$kind,
+            |data, visit| crate::visit::walk::$module::$walk(visit, data),
+        )
+    };
+}
+
+macro_rules! component_dispatch {
+    (($module:ident, $components:ident, $component:ident, $visit:ident, $access:ident, $get:ident); $(($kind:ident, $field:ident, $variant:ident, $rule:ident, $walk:ident),)*) => {
+        match $component.kind {
+            $(ComponentKind::$kind => {
+                if let Some(value) = $components
+                    .$field
+                    .$access()
+                    .and_then(|group| group.$get(&$component.name))
+                {
+                    walk_value!($module, $rule, $walk, $visit, value, $kind);
+                }
+            })*
+        }
+    };
+}
 
 pub use graph::RefGraph;
 
@@ -414,6 +508,47 @@ impl PartialEq for ComponentValue<'_> {
 
 impl Eq for ComponentValue<'_> {}
 
+/// Every component name, in [`ComponentKind::ALL`] order.
+pub(crate) fn component_refs(components: &Components) -> Vec<ComponentRef> {
+    let mut refs = Vec::new();
+    component_kinds!(refs_component, components, refs);
+    refs
+}
+
+/// Walk one component through the read-only walker.
+fn component_read<V: Visit + ?Sized>(
+    components: &Components,
+    component: &ComponentRef,
+    visit: &mut V,
+) {
+    component_kinds!(
+        component_dispatch,
+        read,
+        components,
+        component,
+        visit,
+        as_ref,
+        get
+    );
+}
+
+/// Walk one component through the mutable walker.
+fn component_write<V: VisitMut + ?Sized>(
+    components: &mut Components,
+    component: &ComponentRef,
+    visit: &mut V,
+) {
+    component_kinds!(
+        component_dispatch,
+        write,
+        components,
+        component,
+        visit,
+        as_mut,
+        get_mut
+    );
+}
+
 impl OpenAPIV3 {
     /// Visit every reference, schema, extension map and security requirement
     /// key of this document, including its operations and components.
@@ -496,68 +631,18 @@ impl PathItem {
 impl Components {
     /// Visit one component of this group by name, if it exists.
     pub fn walk_component(&self, component: &ComponentRef, visitor: &mut impl Visit) {
-        read::component(self, component, visitor);
+        component_read(self, component, visitor);
     }
 
     /// The mutable form of [`Components::walk_component`].
     pub fn walk_component_mut(&mut self, component: &ComponentRef, visitor: &mut impl VisitMut) {
-        write::component(self, component, visitor);
+        component_write(self, component, visitor);
     }
 
     /// Borrow one component by kind and name.
     pub fn get(&self, component: &ComponentRef) -> Option<ComponentValue<'_>> {
-        match component.kind {
-            ComponentKind::Schemas => self
-                .schemas
-                .as_ref()?
-                .get(&component.name)
-                .map(ComponentValue::Schema),
-            ComponentKind::Responses => self
-                .responses
-                .as_ref()?
-                .get(&component.name)
-                .map(ComponentValue::Response),
-            ComponentKind::Parameters => self
-                .parameters
-                .as_ref()?
-                .get(&component.name)
-                .map(ComponentValue::Parameter),
-            ComponentKind::Examples => self
-                .examples
-                .as_ref()?
-                .get(&component.name)
-                .map(ComponentValue::Example),
-            ComponentKind::RequestBodies => self
-                .request_bodies
-                .as_ref()?
-                .get(&component.name)
-                .map(ComponentValue::RequestBody),
-            ComponentKind::Headers => self
-                .headers
-                .as_ref()?
-                .get(&component.name)
-                .map(ComponentValue::Header),
-            ComponentKind::SecuritySchemes => self
-                .security_schemes
-                .as_ref()?
-                .get(&component.name)
-                .map(ComponentValue::SecurityScheme),
-            ComponentKind::Links => self
-                .links
-                .as_ref()?
-                .get(&component.name)
-                .map(ComponentValue::Link),
-            ComponentKind::Callbacks => self
-                .callbacks
-                .as_ref()?
-                .get(&component.name)
-                .map(ComponentValue::Callback),
-            ComponentKind::PathItems => self
-                .path_items
-                .as_ref()?
-                .get(&component.name)
-                .map(ComponentValue::PathItem),
-        }
+        let this = self;
+        component_kinds!(get_component, this, component)
     }
 
     /// Rewrite every reference target inside these components through
@@ -620,58 +705,8 @@ impl Components {
     }
 
     fn insert_component(&mut self, target: &ComponentRef, value: ComponentValue<'_>) {
-        match value {
-            ComponentValue::Schema(value) => {
-                self.schemas
-                    .get_or_insert_default()
-                    .insert(target.name.clone(), value.clone());
-            }
-            ComponentValue::Response(value) => {
-                self.responses
-                    .get_or_insert_default()
-                    .insert(target.name.clone(), value.clone());
-            }
-            ComponentValue::Parameter(value) => {
-                self.parameters
-                    .get_or_insert_default()
-                    .insert(target.name.clone(), value.clone());
-            }
-            ComponentValue::Example(value) => {
-                self.examples
-                    .get_or_insert_default()
-                    .insert(target.name.clone(), value.clone());
-            }
-            ComponentValue::RequestBody(value) => {
-                self.request_bodies
-                    .get_or_insert_default()
-                    .insert(target.name.clone(), value.clone());
-            }
-            ComponentValue::Header(value) => {
-                self.headers
-                    .get_or_insert_default()
-                    .insert(target.name.clone(), value.clone());
-            }
-            ComponentValue::SecurityScheme(value) => {
-                self.security_schemes
-                    .get_or_insert_default()
-                    .insert(target.name.clone(), value.clone());
-            }
-            ComponentValue::Link(value) => {
-                self.links
-                    .get_or_insert_default()
-                    .insert(target.name.clone(), value.clone());
-            }
-            ComponentValue::Callback(value) => {
-                self.callbacks
-                    .get_or_insert_default()
-                    .insert(target.name.clone(), value.clone());
-            }
-            ComponentValue::PathItem(value) => {
-                self.path_items
-                    .get_or_insert_default()
-                    .insert(target.name.clone(), value.clone());
-            }
-        }
+        let this = self;
+        component_kinds!(insert_component, this, target, value);
     }
 }
 
@@ -797,8 +832,8 @@ impl Visit for Collect {
 }
 
 /// Lists every `Schema` field so adding one fails to compile here until the
-/// walk decides whether it holds references or schemas.
-#[cfg(not(feature = "lossless-schema-keywords"))]
+/// walk decides whether it holds references or schemas. The feature-gated
+/// fields are part of the same pattern; only the field set changes.
 #[allow(dead_code)]
 fn complete_schema(schema: &Schema) {
     let Schema {
@@ -810,53 +845,14 @@ fn complete_schema(schema: &Schema) {
         content_media_type: _,
         content_encoding: _,
         content_schema: _,
-        properties: _,
-        pattern_properties: _,
-        required: _,
-        min_properties: _,
-        max_properties: _,
-        additional_properties: _,
-        unevaluated_properties: _,
-        property_names: _,
-        all_of: _,
-        any_of: _,
-        one_of: _,
-        not: _,
-        if_schema: _,
-        then_schema: _,
-        else_schema: _,
-        dependent_required: _,
-        dependent_schemas: _,
-        dependencies: _,
-        defs: _,
-        definitions: _,
-        items: _,
-        prefix_items: _,
-        additional_items: _,
-        unevaluated_items: _,
-        contains: _,
-        extras: _,
-    } = schema;
-}
-
-/// Lists every `Schema` field so adding one fails to compile here until the
-/// walk decides whether it holds references or schemas.
-#[cfg(feature = "lossless-schema-keywords")]
-#[allow(dead_code)]
-fn complete_schema(schema: &Schema) {
-    let Schema {
-        _type: _,
-        _ref: _,
-        format: _,
-        nullable: _,
-        description: _,
-        content_media_type: _,
-        content_encoding: _,
-        content_schema: _,
-        schema_format: _,
-        schema: _,
-        external_docs: _,
-        discriminator: _,
+        #[cfg(feature = "lossless-schema-keywords")]
+            schema_format: _,
+        #[cfg(feature = "lossless-schema-keywords")]
+            schema: _,
+        #[cfg(feature = "lossless-schema-keywords")]
+            external_docs: _,
+        #[cfg(feature = "lossless-schema-keywords")]
+            discriminator: _,
         properties: _,
         pattern_properties: _,
         required: _,

@@ -323,11 +323,24 @@ fn ordinary_nested_field_acceptance_matches_strict_decoder() {
 fn callback_expressions_without_braces_admit_like_the_strict_decoder() {
     for child in [
         json!({"https://example.test/hook":{"post":{"responses":{"204":{"description":"done"}}}}}),
-        json!({"https://example.test/hook":7, "{$request.body#/url}":{}}),
-        json!({"$request.header#/X-Callback":{"get":7}}),
         json!({"$ref":"#/components/callbacks/Event", "https://example.test/hook":{"get":7}}),
         json!({"$ref":"#/components/callbacks/Event", "summary":"s", "https://example.test/hook":{}}),
     ] {
         equivalent(with_child("callback", child));
+    }
+    // A constant callback expression is a Path Item in both models. The strict
+    // decoder rejects a malformed expression value; the lossless node retains
+    // it in extras, which is the point of the lossless model.
+    for child in [
+        json!({"https://example.test/hook":7, "{$request.body#/url}":{}}),
+        json!({"$request.header#/X-Callback":{"get":7}}),
+    ] {
+        let operation = with_child("callback", child.clone());
+        let strict = serde_json::from_value::<oas::Operation>(operation.clone());
+        assert!(strict.is_err(), "strict decoding must reject {child}");
+        assert!(
+            Operation::decode(operation).unwrap().admit().is_ok(),
+            "lossless admission keeps the malformed expression for later inspection"
+        );
     }
 }
