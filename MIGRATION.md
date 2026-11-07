@@ -24,7 +24,7 @@ coverage. The remaining differences are listed below.
   unchanged 0.2 API should remain on `oas = "0.2"`.
   [Version 0.3.0](https://crates.io/crates/oas/0.3.0) was published on 2026-09-14.
 
-## Unreleased: boxed Path Item operations
+## 0.4.0: boxed Path Item operations
 
 `PathItem` stores its eight operations as `Option<Box<Operation>>` instead of
 `Option<Operation>`, so an empty path item costs eight pointers rather than eight
@@ -39,7 +39,7 @@ because `Box` is transparent to Serde.
   Borrowed field access still dereferences automatically, so
   `path.get.as_ref().unwrap().summary` continues to compile.
 
-## Unreleased: visitor extension owners
+## 0.4.0: visitor extension owners
 
 `Visit::extensions` and `VisitMut::extensions` take an `ExtrasOwner` first
 argument. `ExtrasOwner::Schema` marks a Schema Object's own unmodeled keywords,
@@ -49,7 +49,7 @@ are extensions. The `xml`, `discriminator` and `externalDocs` objects nested in
 a schema are OpenAPI sub-objects, so their maps use `Object`. The visitor API is
 unreleased; the change only affects code written against this branch.
 
-## Unreleased: Paths, webhooks and callback keys
+## 0.4.0: Paths, webhooks and callback keys
 
 `OpenAPIV3.paths` is now a `Paths` object, and `OpenAPIV3` has a
 `webhooks: Option<BTreeMap<String, PathItem>>` field. Both are source breaking
@@ -154,10 +154,10 @@ fields while retaining values that cannot be represented without changing them:
 
 ```toml
 [dependencies]
-oas = { version = "=0.4.3-dev", features = ["lossless-schema-keywords"] }
+oas = { version = "0.4", features = ["lossless-schema-keywords"] }
 ```
 
-This feature is first packaged in `0.4.2-dev`. It is disabled by default.
+This feature was first packaged in `0.4.2-dev`; 0.4.0 is its first stable release. It is disabled by default.
 Cargo feature unification applies the parsing policy to all uses of this crate in
 the dependency graph, including schemas embedded in `Operation` and `MediaType`.
 

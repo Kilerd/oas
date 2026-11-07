@@ -5,7 +5,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 Rust OpenAPI models with Serde serialization and builders for constructing and
-editing API descriptions. The `0.4.3-dev` prerelease preserves retained-object
+editing API descriptions. Version 0.4 preserves retained-object
 metadata and reference annotations during typed edits. It includes schema type
 unions, boolean schemas, references with sibling keywords, and OpenAPI 3.2
 streaming media types, including Server-Sent Events (SSE).
@@ -20,16 +20,17 @@ changes and remaining model differences.
 
 ```toml
 [dependencies]
-oas = "=0.4.3-dev"
+oas = "0.4"
 serde_json = "1"
 ```
 
-This prerelease introduces Rust source changes: retained objects and references
+Version 0.4 introduces Rust source changes since 0.3: retained objects and references
 gain metadata fields, Link operation IDs and OAuth authorization URLs become
 optional, OAuth flow storage is boxed, and `Tag::with_description` edits an
 existing tag. Structural schema keywords now use typed fields and reject malformed
-values during parsing. Complete struct literals need adaptation. See the
-[0.4.2-dev changelog](CHANGELOG.md#042-dev---2026-11-02) and
+values during parsing. `OpenAPIV3.paths` is a `Paths` object, Path Item operations
+are boxed, and documents gain `webhooks`. Complete struct literals need adaptation.
+See the [0.4.0 changelog](CHANGELOG.md#040---2026-11-07) and
 [Rust API migration](MIGRATION.md).
 
 ## Quick start
@@ -103,7 +104,7 @@ control recursion and reference resolution. `try_for_each_child_at` and
 keyword, map key or array index), so a recursive caller can build the JSON
 Pointer of every schema it visits; the lossless document nodes offer the same
 keyed visitor. The optional
-`lossless-schema-keywords` feature, first packaged in `0.4.2-dev`, retains
+`lossless-schema-keywords` feature retains
 formerly opaque values during typed edits. See the [migration guide](MIGRATION.md)
 for the field-access changes and stricter parsing of these keywords.
 
@@ -284,7 +285,7 @@ round trip for unsupported fields.
 
 ## More examples and documentation
 
-- [API reference for 0.4.3-dev](https://docs.rs/oas/0.4.3-dev/oas/)
+- [API reference for 0.4.0](https://docs.rs/oas/0.4.0/oas/)
 - [Usage guide](https://github.com/Kilerd/oas/blob/main/USAGE_GUIDE.md) for builders, operations, parameters, and reusable components
 - [Basic builder example](https://github.com/Kilerd/oas/blob/main/examples/easy_usage.rs)
 - [Complete API example](https://github.com/Kilerd/oas/blob/main/examples/comprehensive_example.rs)

@@ -7,13 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-11-07
+
+The first stable 0.4 release: everything in the 0.4.0-dev to 0.4.3-dev prereleases below, plus the changes listed here. Upgrading from 0.3.0 or from a prerelease follows the [migration guide](MIGRATION.md).
+
 ### Added
 - `PathItem::operations` and `operations_mut` iterate present operations in specification method order; `Responses::iter` and `iter_mut` yield the default entry and status codes; `ParameterIn` implements `Copy`, `Ord` and `as_str`.
 - `OpenAPIV3.webhooks` models root-level OpenAPI 3.1 webhooks; `walk`, `walk_mut` and `rename_refs` traverse them like Path Items. This is breaking for complete `OpenAPIV3` struct literals: add `webhooks: None`.
 - `oas::visit`: `Visit` and `VisitMut` traversal of the strict model, `ComponentKind` / `ComponentRef` / `RefError`, `RefGraph` closure, dependents and broken-component analysis, `Operation::refs`, `rename_refs` on documents, operations, path items and components, and `Components::copy_from`.
 
 ### Changed
-- `Visit::extensions` and `VisitMut::extensions` take an `ExtrasOwner` first argument: `Schema` for a Schema Object's unmodeled keywords (literal `example`/`default`/`enum`/`const` data) and `Object` for every other OpenAPI object (only `x-*` keys are extensions). The visitor API is unreleased.
+- `Visit::extensions` and `VisitMut::extensions` take an `ExtrasOwner` first argument: `Schema` for a Schema Object's unmodeled keywords (literal `example`/`default`/`enum`/`const` data) and `Object` for every other OpenAPI object (only `x-*` keys are extensions). The visitor API is new in 0.4.0.
 - `ComponentKind` and `RefError` are `#[non_exhaustive]`; `ComponentKind::ALL` is a `&'static [Self]`. `RefSite` and `RefSiteMut` no longer carry a reference's extras: they reach `extensions` first. `ComponentRef::parse` reports a target that does not start with `#` as `External`, including one starting with `$`.
 - The OpenAPI 3.2 positions `PathItem.query`, `PathItem.additionalOperations`, `MediaType.itemEncoding`, `MediaType.prefixEncoding` and `components.mediaTypes` are documented as not walked: they stay in `extras` and are visible through `visit::Visit::extensions`.
 - `OpenAPIV3.paths` is a `Paths` object with its own `extras`; it dereferences to the path map, so indexing and map methods keep working, and `From<BTreeMap<String, PathItem>>` / `FromIterator<(String, PathItem)>` build one. This is breaking for complete `OpenAPIV3` struct literals. `x-*` keys under `paths` are extensions and no longer decode as Path Items.
