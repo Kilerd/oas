@@ -39,6 +39,18 @@ The OpenAPI v3.0 specification is now organized into separate modules for better
 - Flattened serde attributes for flexible JSON structure handling
 - Modular organization improves code navigation and maintainability
 
+## Model dependencies
+
+`types` depends on `security`; both depend on the private `parameter_location`
+leaf. `security` must not import `types`. The published `oas::ParameterIn` and
+`oas::types::ParameterIn` paths re-export the same enum for existing consumers.
+
+The `extensions` module contains inherent constructors and builder methods for
+these model types. Model deserializers and defaults may call those inherent
+methods: this is the one registered implementation-placement exception, not a
+reverse module import or a separate runtime service. Keep constructors shared
+rather than duplicating field defaults in parsers.
+
 ## Development Commands
 
 ### Building and Testing

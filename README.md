@@ -4,30 +4,34 @@
 [![Documentation](https://docs.rs/oas/badge.svg)](https://docs.rs/oas)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-Rust OpenAPI models with Serde serialization and builders for constructing API
-descriptions. [Version 0.3.0](https://crates.io/crates/oas/0.3.0) adds schema type
+Rust OpenAPI models with Serde serialization and builders for constructing and
+editing API descriptions. Version 0.4 preserves retained-object
+metadata and reference annotations during typed edits. It includes schema type
 unions, boolean schemas, references with sibling keywords, and OpenAPI 3.2
 streaming media types, including Server-Sent Events (SSE).
 
 Existing document constructors still default to **OpenAPI 3.0.0**. Coverage of
 **OpenAPI 3.1/3.2 is partial**; the crate represents documents and schemas without
 validating them or resolving references. See the
-[migration guide](https://github.com/Kilerd/oas/blob/main/MIGRATION.md) for API
+[migration guide](MIGRATION.md) for API
 changes and remaining model differences.
 
 ## Installation
 
 ```toml
 [dependencies]
-oas = "0.3"
+oas = "0.4"
 serde_json = "1"
 ```
 
-Upgrading from 0.1 or 0.2 requires an explicit dependency update. In 0.3,
-schema-bearing fields use `SchemaValue`, and `Schema._type` uses `SchemaType`.
-Existing schema helper constructors remain usable with builders. See the
-[0.3.0 changelog](https://github.com/Kilerd/oas/blob/main/CHANGELOG.md#030---2026-09-14)
-and [Rust API migration](https://github.com/Kilerd/oas/blob/main/MIGRATION.md#rust-api-migration).
+Version 0.4 introduces Rust source changes since 0.3: retained objects and references
+gain metadata fields, Link operation IDs and OAuth authorization URLs become
+optional, OAuth flow storage is boxed, and `Tag::with_description` edits an
+existing tag. Structural schema keywords now use typed fields and reject malformed
+values during parsing. `OpenAPIV3.paths` is a `Paths` object, Path Item operations
+are boxed, and documents gain `webhooks`. Complete struct literals need adaptation.
+See the [0.4.0 changelog](CHANGELOG.md#040---2026-11-07) and
+[Rust API migration](MIGRATION.md).
 
 ## Quick start
 
@@ -91,9 +95,18 @@ let media = MediaType::new().with_schema(nullable_string);
 ```
 
 Use `SchemaValue::as_object()` / `as_object_mut()` to inspect or modify object
-fields, and handle `SchemaValue::Boolean` separately. Keywords without dedicated
-fields, including `properties`, `required`, `$defs`, and `anyOf`, are retained as
-JSON values in `Schema.extras`.
+fields, and handle `SchemaValue::Boolean` separately. Structural keywords such as
+`properties`, `required`, `$defs`, and `anyOf` have typed fields. Unknown vocabulary
+and literal payloads remain in `Schema.extras`. Use `try_for_each_child_mut` to
+visit immediate schema children without traversing examples or defaults; callers
+control recursion and reference resolution. `try_for_each_child_at` and
+`try_for_each_child_mut_at` also report each child's `json_pointer::Step` (its
+keyword, map key or array index), so a recursive caller can build the JSON
+Pointer of every schema it visits; the lossless document nodes offer the same
+keyed visitor. The optional
+`lossless-schema-keywords` feature retains
+formerly opaque values during typed edits. See the [migration guide](MIGRATION.md)
+for the field-access changes and stricter parsing of these keywords.
 
 Other reusable OpenAPI objects use `Referenceable<T>` for inline data or references:
 
@@ -107,6 +120,66 @@ let reference: Referenceable<Response> =
 // Existing schema helpers are still accepted by schema-bearing builders.
 let media = MediaType::new().with_schema(Referenceable::string_schema());
 ```
+
+## Traversal, reference graphs and renaming
+
+The strict model has no built-in walk over its object types. `oas::visit` provides
+one: `Visit` and `VisitMut` report every reference position, every Schema Object,
+every unmodeled/extension map, and every security requirement key.
+
+```rust
+use oas::visit::{ComponentKind, RefSite, Visit};
+use oas::{OpenAPIV3, Schema};
+
+struct Counts { schemas: usize, references: usize }
+impl Visit for Counts {
+    fn schema(&mut self, _schema: &Schema) { self.schemas += 1; }
+    fn reference(&mut self, site: RefSite<'_>) {
+        if site.kind == ComponentKind::Schemas { self.references += 1; }
+    }
+}
+
+let mut doc: OpenAPIV3 = serde_json::from_value(serde_json::json!({
+    "openapi": "3.1.0",
+    "info": {"title": "t", "version": "1"},
+    "paths": {},
+    "components": {"schemas": {
+        "A": {"$ref": "#/components/schemas/B"},
+        "B": {"type": "string"}
+    }}
+}))
+.unwrap();
+let mut counts = Counts { schemas: 0, references: 0 };
+doc.walk(&mut counts);
+assert_eq!((counts.schemas, counts.references), (2, 1));
+```
+
+References carry the component kind of their position, not the kind their pointer
+happens to name. `$dynamicRef` and `$recursiveRef` with a string value are reported
+with `RefSite::dynamic` set. Literal data (`example`, `examples` values, `default`,
+`enum`, `const`, extension values) is never visited.
+
+`extensions` receives an `ExtrasOwner`: `Schema` for a Schema Object's own
+unmodeled keywords, where `example`, `examples`, `default`, `enum` and `const`
+hold literal data, and `Object` for every other OpenAPI object, where only
+`x-*` keys are extensions. The `xml`, `discriminator` and `externalDocs` value
+objects nested in a schema are OpenAPI sub-objects, so their maps use `Object`.
+
+`OpenAPIV3::ref_graph` (or `Components::ref_graph`) builds a component-to-component
+graph once. `RefGraph::closure` follows it to a fixpoint, `RefGraph::dependents`
+walks it backwards, and `RefGraph::roots` resolves the references an `Operation`
+writes itself (`Operation::refs`). Components whose closure reaches an unresolvable
+reference are listed in `RefGraph::broken` with the first `RefError`.
+
+`PathItem::operations` / `operations_mut` iterate present operations in method
+order, and `Responses::iter` / `iter_mut` iterate its default entry and status
+codes. `ParameterIn` is `Copy` and `Ord` and exposes `as_str`.
+
+`OpenAPIV3::rename_refs`, `Operation::rename_refs`, `PathItem::rename_refs` and
+`Components::rename_refs` rewrite reference targets through a
+`BTreeMap<ComponentRef, String>`, including `discriminator.mapping` values and
+security requirement keys for renamed security schemes. `Components::copy_from`
+copies components under new names and rewrites the references inside them.
 
 ## OpenAPI 3.2 and SSE
 
@@ -133,21 +206,27 @@ fn main() {
         .with_content_media_type("application/json")
         .with_content_schema(Schema::reference("#/components/schemas/Payload"));
     let event = Schema {
-        extras: BTreeMap::from([
-            ("required".into(), json!(["data"])),
-            ("properties".into(), json!({
-                "event": {"type": "string"},
-                "id": {"type": "string"},
-                "retry": {"type": "integer", "minimum": 0},
-                "data": data
-            })),
-        ]),
+        required: Some(vec!["data".into()]),
+        properties: Some(BTreeMap::from([
+            ("event".into(), Schema::string().into()),
+            ("id".into(), Schema::string().into()),
+            (
+                "retry".into(),
+                Schema {
+                    extras: BTreeMap::from([("minimum".into(), json!(0))]),
+                    ..Schema::integer()
+                }
+                .into(),
+            ),
+            ("data".into(), data.into()),
+        ])),
         ..Schema::object()
     };
     let payload = Schema {
-        extras: BTreeMap::from([("properties".into(), json!({
-            "message": {"type": ["string", "null"]}
-        }))]),
+        properties: Some(BTreeMap::from([(
+            "message".into(),
+            Schema::string().with_types(["string", "null"]).into(),
+        )])),
         ..Schema::object()
     };
     let schemas: BTreeMap<String, SchemaValue> = BTreeMap::from([
@@ -177,6 +256,12 @@ From a checkout, run `cargo run --example sse`. The
 also demonstrates using `schema` and `itemSchema` together and retaining reference
 siblings in a round trip.
 
+The 3.2-only positions `PathItem.query`, `PathItem.additionalOperations`,
+`MediaType.itemEncoding`, `MediaType.prefixEncoding` and `components.mediaTypes`
+are not modeled. They stay in their object's `extras` map and are reported
+through `visit::Visit::extensions`; the visitor does not walk references or
+schemas inside them.
+
 ## Loading JSON
 
 ```rust
@@ -192,14 +277,15 @@ let spec: OpenAPIV3 = serde_json::from_str(json_spec).unwrap();
 println!("{}", serde_json::to_string_pretty(&spec).unwrap());
 ```
 
-Serde support can also be used with a separately chosen YAML serializer. Unknown
-schema keywords are preserved; unknown fields on most other objects are currently
-discarded. Successful deserialization does not guarantee a valid document or a
-lossless round trip for unsupported fields.
+Serde support can also be used with a separately chosen YAML serializer. For
+field preservation when editing a typed document, see
+[document editing and extensions](MIGRATION.md#document-editing-and-extensions).
+Successful deserialization does not guarantee a valid document or a lossless
+round trip for unsupported fields.
 
 ## More examples and documentation
 
-- [API reference for 0.3.0](https://docs.rs/oas/0.3.0/oas/)
+- [API reference for 0.4.0](https://docs.rs/oas/0.4.0/oas/)
 - [Usage guide](https://github.com/Kilerd/oas/blob/main/USAGE_GUIDE.md) for builders, operations, parameters, and reusable components
 - [Basic builder example](https://github.com/Kilerd/oas/blob/main/examples/easy_usage.rs)
 - [Complete API example](https://github.com/Kilerd/oas/blob/main/examples/comprehensive_example.rs)

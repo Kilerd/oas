@@ -11,27 +11,27 @@ fn main() {
         .with_content_media_type("application/json")
         .with_content_schema(Schema::reference("#/components/schemas/Payload"));
     let event = Schema {
-        extras: BTreeMap::from([
-            ("required".into(), json!(["data"])),
+        required: Some(vec!["data".into()]),
+        properties: Some(BTreeMap::from([
+            ("event".into(), Schema::string().into()),
+            ("id".into(), Schema::string().into()),
             (
-                "properties".into(),
-                json!({
-                    "event": {"type": "string"},
-                    "id": {"type": "string"},
-                    "retry": {"type": "integer", "minimum": 0},
-                    "data": data
-                }),
+                "retry".into(),
+                Schema {
+                    extras: BTreeMap::from([("minimum".into(), json!(0))]),
+                    ..Schema::integer()
+                }
+                .into(),
             ),
-        ]),
+            ("data".into(), data.into()),
+        ])),
         ..Schema::object()
     };
     let payload = Schema {
-        extras: BTreeMap::from([(
-            "properties".into(),
-            json!({
-                "message": {"type": ["string", "null"]}
-            }),
-        )]),
+        properties: Some(BTreeMap::from([(
+            "message".into(),
+            Schema::string().with_types(["string", "null"]).into(),
+        )])),
         ..Schema::object()
     };
     let schemas: BTreeMap<String, SchemaValue> = BTreeMap::from([

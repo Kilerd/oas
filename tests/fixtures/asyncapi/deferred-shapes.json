@@ -1,0 +1,38 @@
+{
+  "asyncapi": 3,
+  "id": null,
+  "defaultContentType": ["application/json"],
+  "servers": {
+    "broken": 7,
+    "partial": {"host": null, "protocol": 1, "variables": [], "security": {"Token": []}, "tags": "edge", "bindings": null},
+    "entries": {"variables": {"v": null, "w": {"enum": "x", "examples": [1, null]}}, "security": [null, 1, {"scopes": "a"}]}
+  },
+  "channels": {
+    "nullAddress": {"address": null},
+    "badAddress": {"address": 7, "messages": [], "servers": {"$ref": "#/servers/broken"}, "parameters": null},
+    "badEntries": {"messages": {"m": null, "n": [], "o": {"payload": 7, "headers": "h", "traits": {}}}, "servers": [7, {"$ref": null}], "tags": [null]},
+    "notObject": "channel",
+    "refWithSiblings": {"$ref": "#/components/channels/Shared", "address": "/x", "x-note": true}
+  },
+  "operations": {
+    "badChannel": {"action": 1, "channel": "#/channels/room", "messages": {}, "reply": [], "traits": null, "security": 7},
+    "badReply": {"reply": {"address": "inbox", "channel": null, "messages": [null, "x"]}},
+    "badTrait": {"traits": [7, {"security": {}, "bindings": []}]}
+  },
+  "components": {
+    "schemas": {"Number": 7, "Null": null, "Array": [], "String": "x"},
+    "servers": null,
+    "channels": [],
+    "operations": {"o": 7},
+    "messages": {"m": {"correlationId": 7, "examples": {}, "contentType": null}},
+    "securitySchemes": {"s": {"flows": 7, "scopes": [1]}, "t": {"flows": {"implicit": [], "password": {"availableScopes": []}}}},
+    "serverVariables": 0,
+    "replies": {"r": null},
+    "replyAddresses": {"a": {"location": 1}},
+    "messageTraits": {"t": {"headers": 7}},
+    "operationTraits": "traits",
+    "serverBindings": {"b": {"ws": 7}},
+    "tags": {"t": {"name": null}}
+  },
+  "x-literal": {"channels": {"c": {"address": 7}}}
+}

@@ -23,7 +23,13 @@ fn openapi_3_2_sse_document_retains_event_contract() {
     let media = &response.content.as_ref().unwrap()["text/event-stream"];
     let item = media.item_schema.as_ref().unwrap().as_object().unwrap();
     assert_eq!(item._ref.as_deref(), Some("#/components/schemas/Event"));
-    assert_eq!(item.extras["properties"]["event"]["const"], "job.updated");
+    assert_eq!(
+        item.properties.as_ref().unwrap()["event"]
+            .as_object()
+            .unwrap()
+            .extras["const"],
+        "job.updated"
+    );
     assert_eq!(
         media.schema.as_ref().unwrap().as_object().unwrap()._type,
         Some(SchemaType::Single("array".into()))
@@ -31,13 +37,18 @@ fn openapi_3_2_sse_document_retains_event_contract() {
 
     let schemas = api.components.unwrap().schemas.unwrap();
     let event = schemas["Event"].as_object().unwrap();
-    let fields = &event.extras["properties"];
+    let fields = event.properties.as_ref().unwrap();
     for name in ["event", "id", "data"] {
-        assert_eq!(fields[name]["type"], "string");
+        assert_eq!(
+            fields[name].as_object().unwrap()._type,
+            Some("string".into())
+        );
     }
-    assert_eq!(fields["retry"]["type"], "integer");
-    let data = round_trip::<SchemaValue>(fields["data"].clone());
-    let data = data.as_object().unwrap();
+    assert_eq!(
+        fields["retry"].as_object().unwrap()._type,
+        Some("integer".into())
+    );
+    let data = fields["data"].as_object().unwrap();
     assert_eq!(data.content_media_type.as_deref(), Some("application/json"));
     assert_eq!(
         data.content_schema

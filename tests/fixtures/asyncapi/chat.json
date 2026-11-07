@@ -1,0 +1,182 @@
+{
+  "asyncapi": "3.0.0",
+  "id": "urn:example:chat",
+  "info": {
+    "title": "Chat",
+    "version": "1.0.0",
+    "tags": [{"$ref": "#/components/tags/Public"}],
+    "x-audience": "external"
+  },
+  "defaultContentType": "application/json",
+  "servers": {
+    "production": {
+      "host": "{region}.chat.example.com",
+      "protocol": "wss",
+      "protocolVersion": "13",
+      "pathname": "/ws",
+      "title": "Production",
+      "summary": "Regional endpoint",
+      "description": "Primary cluster.",
+      "variables": {
+        "region": {"enum": ["eu", "us"], "default": "eu", "description": "Region", "examples": ["eu"]},
+        "shared": {"$ref": "#/components/serverVariables/Shared"}
+      },
+      "security": [{"$ref": "#/components/securitySchemes/Token"}, {"type": "httpApiKey", "name": "key", "in": "query"}],
+      "tags": [{"name": "edge"}],
+      "externalDocs": {"url": "https://example.com/servers"},
+      "bindings": {"ws": {"bindingVersion": "0.1.0"}, "x-binding": true},
+      "x-region-owner": "infra"
+    },
+    "staging": {"$ref": "#/components/servers/Staging"}
+  },
+  "channels": {
+    "room": {
+      "address": "/rooms/{roomId}",
+      "title": "Room",
+      "summary": "Messages in one room",
+      "description": "Room traffic.",
+      "messages": {
+        "chat": {"$ref": "#/components/messages/Chat"},
+        "typing": {
+          "name": "typing",
+          "payload": {"type": "object", "properties": {"user": {"$ref": "#/components/schemas/User"}}},
+          "x-fish-internal": false
+        }
+      },
+      "servers": [{"$ref": "#/servers/production"}],
+      "parameters": {
+        "roomId": {"$ref": "#/components/parameters/RoomId"},
+        "inline": {"description": "Inline", "location": "$message.payload#/room", "enum": ["a"], "default": "a", "examples": ["a"]}
+      },
+      "tags": [{"$ref": "#/components/tags/Public"}, {"name": "rooms"}],
+      "externalDocs": {"$ref": "#/components/externalDocs/Guide"},
+      "bindings": {
+        "ws": {
+          "method": "GET",
+          "headers": {"type": "object", "properties": {"x-model": {"type": "string", "enum": ["a", "b"]}}},
+          "query": {"type": "object", "properties": {"token": {"type": "string"}}}
+        }
+      },
+      "x-channel-note": {"$ref": "literal"}
+    },
+    "dynamic": {"address": null, "messages": {}},
+    "implicit": {"description": "no address field"},
+    "shared": {"$ref": "#/components/channels/Shared"}
+  },
+  "operations": {
+    "sendChat": {
+      "action": "send",
+      "channel": {"$ref": "#/channels/room"},
+      "title": "Send chat",
+      "summary": "Client sends a chat message",
+      "description": "Long form.",
+      "security": [{"$ref": "#/components/securitySchemes/Token"}],
+      "tags": [{"name": "chat"}],
+      "externalDocs": {"url": "https://example.com/send"},
+      "bindings": {"$ref": "#/components/operationBindings/Ws"},
+      "traits": [{"$ref": "#/components/operationTraits/Audited"}, {"summary": "inline trait"}],
+      "messages": [{"$ref": "#/channels/room/messages/chat"}],
+      "reply": {
+        "address": {"$ref": "#/components/replyAddresses/Inbox"},
+        "channel": {"$ref": "#/channels/room"},
+        "messages": [{"$ref": "#/channels/room/messages/typing"}]
+      },
+      "x-billing": {"unit": "message"}
+    },
+    "receiveAll": {
+      "action": "receive",
+      "channel": {"$ref": "#/channels/room"},
+      "reply": {"$ref": "#/components/replies/Ack"}
+    },
+    "receiveNone": {"action": "receive", "channel": {"$ref": "#/channels/dynamic"}, "messages": []},
+    "shared": {"$ref": "#/components/operations/Shared"}
+  },
+  "components": {
+    "schemas": {
+      "User": {"type": "object", "properties": {"id": {"type": "string"}}, "required": ["id"]},
+      "Avro": {"schemaFormat": "application/vnd.apache.avro;version=1.9.0", "schema": {"type": "record", "name": "User", "fields": []}},
+      "Bool": true,
+      "Ref": {"$ref": "#/components/schemas/User"}
+    },
+    "servers": {"Staging": {"host": "staging.example.com", "protocol": "ws"}},
+    "channels": {"Shared": {"address": "/shared", "messages": {"ping": {"payload": {"const": "ping"}}}}},
+    "operations": {"Shared": {"action": "receive", "channel": {"$ref": "#/components/channels/Shared"}}},
+    "messages": {
+      "Chat": {
+        "headers": {"type": "object", "properties": {"x-request-id": {"type": "string"}}},
+        "payload": {
+          "type": "object",
+          "properties": {"event": {"const": "chat"}, "text": {"type": "string"}, "author": {"$ref": "#/components/schemas/User"}},
+          "required": ["event", "text"]
+        },
+        "correlationId": {"$ref": "#/components/correlationIds/Request"},
+        "contentType": "application/json",
+        "name": "chat",
+        "title": "Chat",
+        "summary": "A chat message",
+        "description": "Text sent to a room.",
+        "tags": [{"name": "chat"}],
+        "externalDocs": {"url": "https://example.com/chat"},
+        "bindings": {"ws": {"bindingVersion": "0.1.0"}},
+        "examples": [{"name": "hello", "payload": {"event": "chat", "text": "hi", "$ref": "literal"}}],
+        "traits": [{"$ref": "#/components/messageTraits/Envelope"}, {"contentType": "text/plain"}],
+        "x-fish-internal": false
+      },
+      "Avro": {"payload": {"schemaFormat": "application/vnd.apache.avro;version=1.9.0", "schema": {"type": "string"}}}
+    },
+    "securitySchemes": {
+      "Token": {"type": "httpApiKey", "name": "authorization", "in": "header", "description": "Bearer token"},
+      "OAuth": {
+        "type": "oauth2",
+        "flows": {
+          "clientCredentials": {"tokenUrl": "https://example.com/token", "availableScopes": {"chat:write": "Write"}},
+          "authorizationCode": {"authorizationUrl": "https://example.com/auth", "tokenUrl": "https://example.com/token", "refreshUrl": "https://example.com/refresh", "availableScopes": {}},
+          "implicit": {"authorizationUrl": "https://example.com/auth", "availableScopes": {}},
+          "password": {"tokenUrl": "https://example.com/token", "availableScopes": {}, "x-flow": 1}
+        },
+        "scopes": ["chat:write"]
+      },
+      "Http": {"type": "http", "scheme": "bearer", "bearerFormat": "JWT"},
+      "Oidc": {"type": "openIdConnect", "openIdConnectUrl": "https://example.com/.well-known/openid-configuration"}
+    },
+    "serverVariables": {"Shared": {"default": "x", "enum": ["x"]}},
+    "parameters": {"RoomId": {"description": "Room id", "location": "$message.payload#/roomId"}},
+    "correlationIds": {"Request": {"description": "Request id", "location": "$message.header#/x-request-id"}},
+    "replies": {"Ack": {"channel": {"$ref": "#/channels/room"}, "messages": [{"$ref": "#/components/messages/Chat"}]}},
+    "replyAddresses": {"Inbox": {"description": "Reply inbox", "location": "$message.header#/replyTo"}},
+    "messageTraits": {
+      "Envelope": {
+        "headers": {"type": "object", "properties": {"x-trace": {"type": "string"}}},
+        "correlationId": {"location": "$message.header#/trace"},
+        "contentType": "application/json",
+        "name": "envelope",
+        "title": "Envelope",
+        "summary": "Common headers",
+        "description": "Shared message metadata.",
+        "tags": [{"name": "common"}],
+        "externalDocs": {"url": "https://example.com/envelope"},
+        "bindings": {"ws": {}},
+        "examples": [{"headers": {"x-trace": "1"}}]
+      }
+    },
+    "operationTraits": {
+      "Audited": {
+        "title": "Audited",
+        "summary": "Audit trail",
+        "description": "Operations that are audited.",
+        "security": [{"$ref": "#/components/securitySchemes/OAuth"}],
+        "tags": [{"name": "audit"}],
+        "externalDocs": {"url": "https://example.com/audit"},
+        "bindings": {"ws": {}}
+      }
+    },
+    "serverBindings": {"Ws": {"ws": {}}},
+    "channelBindings": {"Ws": {"ws": {"method": "GET"}}},
+    "operationBindings": {"Ws": {"ws": {}}},
+    "messageBindings": {"Ws": {"ws": {}}},
+    "tags": {"Public": {"name": "public", "description": "Public API"}},
+    "externalDocs": {"Guide": {"url": "https://example.com/guide"}},
+    "x-components-owner": "chat"
+  },
+  "x-root": [1, 1.0, -0, 1e300, "text", null]
+}

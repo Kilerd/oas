@@ -32,7 +32,8 @@ impl OpenAPIV3 {
             openapi: "3.0.0".to_string(),
             info,
             servers: None,
-            paths: BTreeMap::new(),
+            paths: Paths::default(),
+            webhooks: None,
             components: None,
             security: None,
             tags: None,
@@ -47,7 +48,10 @@ impl OpenAPIV3 {
     }
 
     pub fn with_paths(mut self, paths: BTreeMap<String, PathItem>) -> Self {
-        self.paths = paths;
+        self.paths = Paths {
+            paths,
+            ..Paths::default()
+        };
         self
     }
 
@@ -65,6 +69,7 @@ impl OpenAPIV3 {
 impl Info {
     pub fn new(title: impl Into<String>, version: impl Into<String>) -> Self {
         Self {
+            extras: BTreeMap::new(),
             title: title.into(),
             description: None,
             terms_of_service: None,
@@ -93,6 +98,7 @@ impl Info {
 impl Contact {
     pub fn new() -> Self {
         Self {
+            extras: BTreeMap::new(),
             name: None,
             url: None,
             email: None,
@@ -124,6 +130,7 @@ impl Default for Contact {
 impl License {
     pub fn new(name: impl Into<String>) -> Self {
         Self {
+            extras: BTreeMap::new(),
             name: name.into(),
             url: None,
         }
@@ -138,6 +145,7 @@ impl License {
 impl Server {
     pub fn new(url: impl Into<String>) -> Self {
         Self {
+            extras: BTreeMap::new(),
             url: url.into(),
             description: None,
             variables: None,
@@ -158,6 +166,7 @@ impl Server {
 impl ServerVariable {
     pub fn new(default: impl Into<String>) -> Self {
         Self {
+            extras: BTreeMap::new(),
             _enum: None,
             default: default.into(),
             description: None,
@@ -178,6 +187,7 @@ impl ServerVariable {
 impl PathItem {
     pub fn new() -> Self {
         Self {
+            extras: BTreeMap::new(),
             _ref: None,
             summary: None,
             description: None,
@@ -195,27 +205,27 @@ impl PathItem {
     }
 
     pub fn with_get(mut self, operation: Operation) -> Self {
-        self.get = Some(operation);
+        self.get = Some(Box::new(operation));
         self
     }
 
     pub fn with_post(mut self, operation: Operation) -> Self {
-        self.post = Some(operation);
+        self.post = Some(Box::new(operation));
         self
     }
 
     pub fn with_put(mut self, operation: Operation) -> Self {
-        self.put = Some(operation);
+        self.put = Some(Box::new(operation));
         self
     }
 
     pub fn with_delete(mut self, operation: Operation) -> Self {
-        self.delete = Some(operation);
+        self.delete = Some(Box::new(operation));
         self
     }
 
     pub fn with_patch(mut self, operation: Operation) -> Self {
-        self.patch = Some(operation);
+        self.patch = Some(Box::new(operation));
         self
     }
 }
@@ -241,6 +251,7 @@ impl Operation {
             deprecated: None,
             security: None,
             servers: None,
+            extras: BTreeMap::new(),
         }
     }
 
@@ -278,6 +289,7 @@ impl Operation {
 impl Parameter {
     pub fn new(name: impl Into<String>, location: ParameterIn) -> Self {
         Self {
+            extras: BTreeMap::new(),
             name: name.into(),
             _in: location,
             description: None,
@@ -313,6 +325,7 @@ impl Parameter {
 impl RequestBody {
     pub fn new(content: BTreeMap<String, MediaType>) -> Self {
         Self {
+            extras: BTreeMap::new(),
             description: None,
             required: None,
             content,
@@ -337,6 +350,7 @@ impl Response {
             headers: None,
             content: None,
             links: None,
+            extras: BTreeMap::new(),
         }
     }
 
@@ -356,6 +370,7 @@ impl Responses {
         Self {
             default: None,
             data: BTreeMap::new(),
+            extras: BTreeMap::new(),
         }
     }
 
@@ -383,6 +398,7 @@ impl Default for Responses {
 impl MediaType {
     pub fn new() -> Self {
         Self {
+            extras: BTreeMap::new(),
             schema: None,
             item_schema: None,
             example: None,
@@ -416,17 +432,7 @@ impl Default for MediaType {
 
 impl Schema {
     pub fn new() -> Self {
-        Self {
-            _type: None,
-            _ref: None,
-            format: None,
-            nullable: None,
-            description: None,
-            content_media_type: None,
-            content_encoding: None,
-            content_schema: None,
-            extras: BTreeMap::new(),
-        }
+        Self::default()
     }
 
     pub fn with_type(mut self, schema_type: impl Into<String>) -> Self {
@@ -505,12 +511,6 @@ impl Schema {
     }
 }
 
-impl Default for Schema {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
 impl Components {
     pub fn new() -> Self {
         Self {
@@ -523,6 +523,8 @@ impl Components {
             security_schemes: None,
             links: None,
             callbacks: None,
+            path_items: None,
+            extras: BTreeMap::new(),
         }
     }
 
@@ -559,6 +561,7 @@ impl Default for Components {
 impl Tag {
     pub fn new(name: impl Into<String>, description: Option<impl Into<String>>) -> Tag {
         Self {
+            extras: BTreeMap::new(),
             name: name.into(),
             description: description.map(|d| d.into()),
             external_docs: None,
@@ -566,19 +569,13 @@ impl Tag {
     }
 
     pub fn simple(name: impl Into<String>) -> Tag {
-        Self {
-            name: name.into(),
-            description: None,
-            external_docs: None,
-        }
+        Self::new(name, None::<String>)
     }
 
-    pub fn with_description(name: impl Into<String>, description: impl Into<String>) -> Tag {
-        Self {
-            name: name.into(),
-            description: Some(description.into()),
-            external_docs: None,
-        }
+    /// Set the description while retaining the tag's name and external documentation.
+    pub fn with_description(mut self, description: impl Into<String>) -> Self {
+        self.description = Some(description.into());
+        self
     }
 }
 
@@ -716,20 +713,80 @@ impl Referenceable<RequestBody> {
     }
 }
 
+impl PathItem {
+    /// The operations present, in specification method order.
+    pub fn operations(&self) -> impl Iterator<Item = (&'static str, &Operation)> {
+        [
+            ("get", self.get.as_deref()),
+            ("put", self.put.as_deref()),
+            ("post", self.post.as_deref()),
+            ("delete", self.delete.as_deref()),
+            ("options", self.options.as_deref()),
+            ("head", self.head.as_deref()),
+            ("patch", self.patch.as_deref()),
+            ("trace", self.trace.as_deref()),
+        ]
+        .into_iter()
+        .filter_map(|(method, operation)| operation.map(|operation| (method, operation)))
+    }
+
+    /// The mutable form of [`PathItem::operations`].
+    pub fn operations_mut(&mut self) -> impl Iterator<Item = (&'static str, &mut Operation)> {
+        [
+            ("get", self.get.as_deref_mut()),
+            ("put", self.put.as_deref_mut()),
+            ("post", self.post.as_deref_mut()),
+            ("delete", self.delete.as_deref_mut()),
+            ("options", self.options.as_deref_mut()),
+            ("head", self.head.as_deref_mut()),
+            ("patch", self.patch.as_deref_mut()),
+            ("trace", self.trace.as_deref_mut()),
+        ]
+        .into_iter()
+        .filter_map(|(method, operation)| operation.map(|operation| (method, operation)))
+    }
+}
+
+impl Responses {
+    /// The `default` entry, then the status codes in map order.
+    pub fn iter(&self) -> impl Iterator<Item = (&str, &Referenceable<Response>)> + '_ {
+        self.default
+            .iter()
+            .map(|response| ("default", response))
+            .chain(
+                self.data
+                    .iter()
+                    .map(|(status, response)| (status.as_str(), response)),
+            )
+    }
+
+    /// The mutable form of [`Responses::iter`].
+    pub fn iter_mut(&mut self) -> impl Iterator<Item = (&str, &mut Referenceable<Response>)> + '_ {
+        self.default
+            .iter_mut()
+            .map(|response| ("default", response))
+            .chain(
+                self.data
+                    .iter_mut()
+                    .map(|(status, response)| (status.as_str(), response)),
+            )
+    }
+}
+
 // Additional convenience methods for PathItem
 impl PathItem {
     /// Add multiple HTTP methods at once
     pub fn with_operations(mut self, operations: Vec<(&str, Operation)>) -> Self {
         for (method, operation) in operations {
             match method.to_lowercase().as_str() {
-                "get" => self.get = Some(operation),
-                "post" => self.post = Some(operation),
-                "put" => self.put = Some(operation),
-                "delete" => self.delete = Some(operation),
-                "patch" => self.patch = Some(operation),
-                "options" => self.options = Some(operation),
-                "head" => self.head = Some(operation),
-                "trace" => self.trace = Some(operation),
+                "get" => self.get = Some(Box::new(operation)),
+                "post" => self.post = Some(Box::new(operation)),
+                "put" => self.put = Some(Box::new(operation)),
+                "delete" => self.delete = Some(Box::new(operation)),
+                "patch" => self.patch = Some(Box::new(operation)),
+                "options" => self.options = Some(Box::new(operation)),
+                "head" => self.head = Some(Box::new(operation)),
+                "trace" => self.trace = Some(Box::new(operation)),
                 _ => {} // Ignore unknown methods
             }
         }
@@ -787,4 +844,32 @@ impl_serde_json! {
     Operation, ExternalDocumentation, ParameterIn, Parameter, RequestBody, MediaType,
     Encoding, Responses, Response, Callback, Example, Link, Header, Tag, Reference,
     Schema, Discriminator,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Description builders must edit the existing tag instead of reconstructing its metadata.
+    #[test]
+    fn tag_description_builder_preserves_existing_fields_and_constructor_bytes() {
+        let described = Tag::simple("pets").with_description("Pet operations");
+        assert_eq!(
+            serde_json::to_string(&described).unwrap(),
+            r#"{"name":"pets","description":"Pet operations"}"#,
+            "the migrated constructor must preserve wire bytes, otherwise an API-only migration changes documents"
+        );
+        let mut tag = Tag::new("pets", Some("Old description"));
+        tag.extras.insert("x-tag".into(), serde_json::json!(true));
+        tag.external_docs = Some(ExternalDocumentation {
+            description: Some("Guide".into()),
+            url: "https://example.com/guide".into(),
+            extras: BTreeMap::from([("x-doc".into(), serde_json::json!(true))]),
+        });
+        assert_eq!(
+            serde_json::to_string(&tag.with_description("Updated")).unwrap(),
+            r#"{"name":"pets","description":"Updated","externalDocs":{"description":"Guide","url":"https://example.com/guide","x-doc":true},"x-tag":true}"#,
+            "changing the description must retain the name and docs, otherwise the builder discards caller metadata"
+        );
+    }
 }

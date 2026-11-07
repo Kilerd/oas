@@ -60,10 +60,26 @@
 // Module declarations
 pub mod builders;
 pub mod extensions;
+#[cfg(feature = "lossless-schema-keywords")]
+mod heap_size;
+#[cfg(feature = "lossless-schema-keywords")]
+pub use heap_size::HeapSize;
+#[cfg(feature = "lossless-schema-keywords")]
+pub mod lossless_component;
+#[cfg(feature = "lossless-schema-keywords")]
+pub use lossless_component::asyncapi as lossless_asyncapi;
+pub mod json_pointer;
+pub mod merge_patch;
+mod parameter_location;
+
+mod schema;
 pub mod security;
 pub mod types;
+pub mod visit;
 
 // Re-export main types for convenience
+#[cfg(feature = "lossless-schema-keywords")]
+pub use schema::{OwnedSchemaField, SchemaField, SchemaFieldMut, SchemaKeywordKind};
 pub use security::*;
 pub use types::*;
 

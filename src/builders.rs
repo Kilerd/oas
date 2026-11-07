@@ -145,7 +145,7 @@ impl Default for OperationBuilder {
 ///         .with_get(builders::get("List users").build())
 ///         .with_post(builders::post("Create user").build()));
 /// ```
-
+///
 /// Create a new OpenAPI specification with basic info.
 ///
 /// This creates an OpenAPIV3 document with the specified title and version,
